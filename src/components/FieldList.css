@@ -1,0 +1,88 @@
+.field-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.field-list-empty {
+  color: #888;
+  font-size: 0.88rem;
+  padding: 12px 0;
+  text-align: center;
+}
+
+.fl-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid #e0e8f0;
+  border-radius: 6px;
+  background: #fafcff;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.fl-item:hover {
+  background: #edf4ff;
+}
+
+.fl-selected {
+  border-color: #ff4400;
+  background: #fff5f2;
+}
+
+.fl-name {
+  flex: 1;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #1a1a2e;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fl-name em {
+  color: #aaa;
+  font-style: italic;
+}
+
+.fl-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fl-badge {
+  color: white;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.fl-page {
+  font-size: 0.75rem;
+  color: #888;
+}
+
+.fl-del {
+  background: none;
+  border: none;
+  color: #bbb;
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 2px 4px;
+  border-radius: 3px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.fl-del:hover {
+  color: #d04040;
+  background: #ffe0e0;
+}
