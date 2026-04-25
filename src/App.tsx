@@ -5,6 +5,7 @@ import { PDFViewer } from './components/PDFViewer';
 import { FieldEditor } from './components/FieldEditor';
 import { FieldList } from './components/FieldList';
 import { ExportPanel } from './components/ExportPanel';
+import { ImportPanel } from './components/ImportPanel';
 import { Field, FieldType } from './types/Field';
 import './App.css';
 
@@ -27,6 +28,9 @@ function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [debugMode, setDebugMode] = useState(false);
   const [defaultType, setDefaultType] = useState<FieldType>('text');
+  const [gridSize, setGridSize] = useState(4);
+  const [enableOCR, setEnableOCR] = useState(false);
+  const [enableAutoDetect, setEnableAutoDetect] = useState(false);
 
   // Load total pages when file changes
   useEffect(() => {
@@ -63,6 +67,11 @@ function App() {
     setFields((prev) => prev.filter((f) => f.id !== id));
     setSelectedId((prev) => (prev === id ? null : prev));
   }, []);
+  
+  const handleImport = useCallback((importedFields: Field[]) => {
+    setFields(importedFields);
+    setSelectedId(null);
+  }, []);
 
   const selectedField = fields.find((f) => f.id === selectedId) ?? null;
 
@@ -91,6 +100,38 @@ function App() {
                   </option>
                 ))}
               </select>
+              
+              <label className="ctrl-label">Grid:</label>
+              <select
+                className="ctrl-select"
+                value={gridSize}
+                onChange={(e) => setGridSize(Number(e.target.value))}
+              >
+                <option value={0}>Off</option>
+                <option value={2}>2px</option>
+                <option value={4}>4px</option>
+                <option value={8}>8px</option>
+                <option value={16}>16px</option>
+              </select>
+              
+              <label className="ctrl-check">
+                <input
+                  type="checkbox"
+                  checked={enableOCR}
+                  onChange={(e) => setEnableOCR(e.target.checked)}
+                />
+                OCR
+              </label>
+              
+              <label className="ctrl-check">
+                <input
+                  type="checkbox"
+                  checked={enableAutoDetect}
+                  onChange={(e) => setEnableAutoDetect(e.target.checked)}
+                />
+                Auto-detect
+              </label>
+              
               <label className="ctrl-check">
                 <input
                   type="checkbox"
@@ -124,6 +165,10 @@ function App() {
             {/* Left sidebar */}
             <aside className="sidebar">
               <section className="sidebar-section">
+                <ImportPanel onImport={handleImport} />
+              </section>
+            
+              <section className="sidebar-section">
                 <h2 className="sidebar-heading">Fields ({fields.length})</h2>
                 <FieldList
                   fields={fields}
@@ -156,6 +201,9 @@ function App() {
                 selectedId={selectedId}
                 debugMode={debugMode}
                 defaultType={defaultType}
+                gridSize={gridSize}
+                enableOCR={enableOCR}
+                enableAutoDetect={enableAutoDetect}
                 currentPage={currentPage}
                 totalPages={totalPages}
                 onPageChange={setCurrentPage}

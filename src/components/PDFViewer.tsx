@@ -6,6 +6,9 @@ import React, {
 } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { Field, FieldType } from '../types/Field';
+import { snapRectToGrid } from '../utils/grid';
+import { isOverflowRisk } from '../utils/validation';
+import { OCRWord, extractTextWithOCR, findNearbyLabel, labelToFieldName } from '../utils/ocr';
 import './PDFViewer.css';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `${process.env.PUBLIC_URL}/pdf.worker.min.mjs`;
@@ -45,9 +48,13 @@ interface Props {
   defaultType: FieldType;
   currentPage: number;
   totalPages: number;
+  gridSize: number;
+  enableOCR: boolean;
+  enableAutoDetect: boolean;
   onPageChange: (page: number) => void;
   onFieldAdded: (field: Field) => void;
   onFieldSelected: (id: string) => void;
+  onOCRProgress?: (progress: number) => void;
 }
 
 export const PDFViewer: React.FC<Props> = ({
@@ -58,16 +65,41 @@ export const PDFViewer: React.FC<Props> = ({
   defaultType,
   currentPage,
   totalPages,
+  gridSize,
+  enableOCR,
+  enableAutoDetect,
   onPageChange,
   onFieldAdded,
   onFieldSelected,
+  onOCRProgress,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const pdfRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null);
   const viewportRef = useRef<pdfjsLib.PageViewport | null>(null);
+  const pageRef = useRef<pdfjsLib.PDFPageProxy | null>(null);
   const [drawing, setDrawing] = useState<DrawRect | null>(null);
+  const [ocrWords, setOcrWords] = useState<OCRWord[]>([]);
+  const [shiftPressed, setShiftPressed] = useState(false);
   const isMouseDown = useRef(false);
+
+  // Keyboard event listeners for Shift key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') setShiftPressed(true);
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') setShiftPressed(false);
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
 
   // Load PDF
   useEffect(() => {
@@ -84,19 +116,20 @@ export const PDFViewer: React.FC<Props> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [file]);
 
-  // Re-render page when page number changes
+  // Re-render page when page number changes or auto-detect toggles
   useEffect(() => {
     if (pdfRef.current) {
       renderPage(pdfRef.current, currentPage);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage]);
+  }, [currentPage, enableAutoDetect, enableOCR]);
 
   const renderPage = async (
     pdf: pdfjsLib.PDFDocumentProxy,
     pageNum: number
   ) => {
     const page = await pdf.getPage(pageNum);
+    pageRef.current = page;
     const viewport = page.getViewport({ scale: SCALE });
     viewportRef.current = viewport;
 
@@ -110,7 +143,82 @@ export const PDFViewer: React.FC<Props> = ({
 
     const ctx = canvas.getContext('2d')!;
     await page.render({ canvas, canvasContext: ctx, viewport }).promise;
+    
+    // Auto-detect PDF form fields (AcroForm)
+    if (enableAutoDetect) {
+      await autoDetectFormFields(page, viewport, pageNum - 1);
+    }
+    
+    // Run OCR if enabled
+    if (enableOCR && canvas) {
+      try {
+        const words = await extractTextWithOCR(canvas);
+        setOcrWords(words);
+        if (onOCRProgress) onOCRProgress(100);
+      } catch (err) {
+        console.error('OCR failed:', err);
+        setOcrWords([]);
+      }
+    } else {
+      setOcrWords([]);
+    }
+    
     drawOverlay();
+  };
+
+  const autoDetectFormFields = async (
+    page: pdfjsLib.PDFPageProxy,
+    viewport: pdfjsLib.PageViewport,
+    pageIndex: number
+  ) => {
+    try {
+      const annotations = await page.getAnnotations();
+      const formFields = annotations.filter((ann: any) => 
+        ann.subtype === 'Widget' && ann.fieldType
+      );
+      
+      for (const ann of formFields) {
+        // Check if this field already exists (by approximate position)
+        const exists = fields.some(f => 
+          f.page === pageIndex &&
+          Math.abs(f.x - ann.rect[0]) < 5 &&
+          Math.abs(f.y - ann.rect[1]) < 5
+        );
+        
+        if (exists) continue;
+        
+        // Convert annotation rect to our coordinate system
+        const [x1, y1, x2, y2] = ann.rect;
+        const width = Math.abs(x2 - x1);
+        const height = Math.abs(y2 - y1);
+        
+        let fieldType: FieldType = 'text';
+        if (ann.fieldType === 'Tx') {
+          fieldType = ann.multiLine ? 'multiline' : 'text';
+        } else if (ann.fieldType === 'Btn') {
+          fieldType = 'checkbox';
+        }
+        
+        const fieldName = labelToFieldName(ann.fieldName || ann.alternativeText || '');
+        
+        const newField: Field = {
+          id: `auto-${Date.now()}-${Math.random()}`,
+          name: fieldName,
+          page: pageIndex,
+          x: x1,
+          y: y1,
+          width,
+          height,
+          type: fieldType,
+          fontSize: 10,
+          maxWidth: width,
+        };
+        
+        onFieldAdded(newField);
+      }
+    } catch (err) {
+      console.error('Auto-detect failed:', err);
+    }
   };
 
   const drawOverlay = useCallback(() => {
@@ -129,17 +237,21 @@ export const PDFViewer: React.FC<Props> = ({
       const canvasW = f.width * SCALE;
       const canvasH = f.height * SCALE;
 
-      ctx.fillStyle = TYPE_COLORS[f.type];
+      // Check for overflow risk
+      const hasOverflow = debugMode && isOverflowRisk(f.type, f.maxWidth ?? f.width);
+      
+      ctx.fillStyle = hasOverflow ? 'rgba(255, 0, 0, 0.25)' : TYPE_COLORS[f.type];
       ctx.fillRect(canvasX, canvasY, canvasW, canvasH);
 
-      ctx.strokeStyle =
-        f.id === selectedId ? '#ff4400' : TYPE_STROKE[f.type];
-      ctx.lineWidth = f.id === selectedId ? 2.5 : 1.5;
+      ctx.strokeStyle = hasOverflow 
+        ? '#ff0000' 
+        : (f.id === selectedId ? '#ff4400' : TYPE_STROKE[f.type]);
+      ctx.lineWidth = hasOverflow ? 2.5 : (f.id === selectedId ? 2.5 : 1.5);
       ctx.strokeRect(canvasX, canvasY, canvasW, canvasH);
 
       // Label
-      ctx.fillStyle = '#1a1a2e';
-      ctx.font = '10px monospace';
+      ctx.fillStyle = hasOverflow ? '#ff0000' : '#1a1a2e';
+      ctx.font = hasOverflow ? 'bold 10px monospace' : '10px monospace';
       ctx.fillText(f.name || '(unnamed)', canvasX + 3, canvasY + 13);
 
       if (debugMode) {
@@ -150,6 +262,12 @@ export const PDFViewer: React.FC<Props> = ({
           canvasX + 3,
           canvasY + canvasH - 3
         );
+        
+        if (hasOverflow) {
+          ctx.fillStyle = '#ff0000';
+          ctx.font = 'bold 9px monospace';
+          ctx.fillText('⚠ OVERFLOW RISK', canvasX + 3, canvasY + canvasH - 15);
+        }
       }
     }
 
@@ -231,19 +349,37 @@ export const PDFViewer: React.FC<Props> = ({
 
     // Convert top-left of rectangle to PDF coords (computed manually below)
     // Width/height just scale by SCALE factor
-    const pdfWidth = w / SCALE;
-    const pdfHeight = h / SCALE;
+    let pdfWidth = w / SCALE;
+    let pdfHeight = h / SCALE;
 
     // PDF y is bottom-left origin, so we need to adjust:
     // canvasY is from top, PDF y is from bottom
     // The bottom of the rectangle in canvas coords = y + h
     // PDF y of bottom = (viewport.height - (y + h)) / SCALE
-    const pdfY = (viewport.height - (y + h)) / SCALE;
-    const pdfX = x / SCALE;
+    let pdfY = (viewport.height - (y + h)) / SCALE;
+    let pdfX = x / SCALE;
+    
+    // Apply snap-to-grid if Shift is pressed
+    if (shiftPressed && gridSize > 0) {
+      const snapped = snapRectToGrid(pdfX, pdfY, pdfWidth, pdfHeight, gridSize);
+      pdfX = snapped.x;
+      pdfY = snapped.y;
+      pdfWidth = snapped.width;
+      pdfHeight = snapped.height;
+    }
+    
+    // Proximity label inference from OCR
+    let suggestedName = '';
+    if (enableOCR && ocrWords.length > 0) {
+      const nearbyLabel = findNearbyLabel(pdfX, pdfY, pdfWidth, pdfHeight, ocrWords);
+      if (nearbyLabel) {
+        suggestedName = labelToFieldName(nearbyLabel);
+      }
+    }
 
     const newField: Field = {
       id: Date.now().toString(),
-      name: '',
+      name: suggestedName,
       page: currentPage - 1,
       x: pdfX,
       y: pdfY,
@@ -293,6 +429,16 @@ export const PDFViewer: React.FC<Props> = ({
           Next →
         </button>
       </div>
+      {shiftPressed && gridSize > 0 && (
+        <div className="pdf-hint">
+          🔲 Snap-to-grid active ({gridSize}px grid)
+        </div>
+      )}
+      {enableOCR && ocrWords.length > 0 && (
+        <div className="pdf-hint">
+          📝 OCR detected {ocrWords.length} words (proximity labeling enabled)
+        </div>
+      )}
     </div>
   );
 };

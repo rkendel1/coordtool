@@ -1,5 +1,7 @@
 import React from 'react';
 import { Field, FieldType } from '../types/Field';
+import { FieldTemplatePicker } from './FieldTemplatePicker';
+import { getOverflowWarning } from '../utils/validation';
 import './FieldEditor.css';
 
 const FIELD_TYPES: FieldType[] = [
@@ -19,10 +21,17 @@ interface Props {
 
 export const FieldEditor: React.FC<Props> = ({ field, onChange, onDelete }) => {
   const update = (patch: Partial<Field>) => onChange({ ...field, ...patch });
+  const overflowWarning = getOverflowWarning(field.type, field.maxWidth ?? field.width);
 
   return (
     <div className="field-editor">
       <h3 className="fe-title">Edit Field</h3>
+
+      <FieldTemplatePicker
+        onSelectTemplate={(template) => {
+          update({ name: template.name, type: template.type });
+        }}
+      />
 
       <label className="fe-label">Field Name</label>
       <input
@@ -77,6 +86,12 @@ export const FieldEditor: React.FC<Props> = ({ field, onChange, onDelete }) => {
         value={field.maxWidth ?? Math.round(field.width)}
         onChange={(e) => update({ maxWidth: Number(e.target.value) })}
       />
+      
+      {overflowWarning && (
+        <div className="fe-warning">
+          ⚠️ {overflowWarning}
+        </div>
+      )}
 
       {field.type === 'multiline' && (
         <label className="fe-check-label">

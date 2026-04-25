@@ -54,3 +54,12 @@
   opacity: 0.4;
   cursor: default;
 }
+
+.pdf-hint {
+  font-size: 0.85rem;
+  color: #666;
+  background: #f0f8ff;
+  padding: 6px 12px;
+  border-radius: 4px;
+  border: 1px solid #c0d8f0;
+}

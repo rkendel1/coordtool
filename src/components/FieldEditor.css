@@ -83,3 +83,12 @@
 .fe-delete:hover {
   background: #ffe0e0;
 }
+
+.fe-warning {
+  font-size: 0.8rem;
+  color: #c07000;
+  background: #fff8e0;
+  border-radius: 5px;
+  padding: 6px 10px;
+  margin-top: 4px;
+}
