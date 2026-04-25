@@ -7,6 +7,8 @@ export type FormatterFunction = (value: any) => string;
 
 /**
  * Format a date value to MM/DD/YYYY format
+ * Note: Only supports basic format patterns (MM, DD, YYYY)
+ * For more complex formatting, consider using date-fns or similar libraries
  */
 export function formatDate(value: any, format: string = 'MM/DD/YYYY'): string {
   if (!value) return '';
@@ -54,6 +56,8 @@ export function formatPercentage(value: any): string {
 
 /**
  * Format a phone number to (XXX) XXX-XXXX format
+ * Note: Only supports 10-digit US phone numbers
+ * International numbers will be returned as-is
  */
 export function formatPhone(value: any): string {
   if (!value) return '';

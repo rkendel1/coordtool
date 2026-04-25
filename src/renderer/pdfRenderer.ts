@@ -26,6 +26,7 @@ export interface RenderOptions {
 
 /**
  * Resolve a value from data using the mapping
+ * Note: Mapping keys may have 'TODO.' prefix for unmapped/placeholder fields
  */
 export function resolveValue(
   mapping: Record<string, MappingEntry>,
@@ -42,7 +43,7 @@ export function resolveValue(
   }
   
   // Extract the data path from the mapping key
-  // e.g., "applicant.name" from mapping key "applicant.name"
+  // e.g., "applicant.name" from mapping key "applicant.name" or "TODO.applicant.name"
   const dataPath = mappingKey.replace(/^TODO\./, '');
   
   // Navigate nested data structure
@@ -78,6 +79,9 @@ export function applyTransforms(
 
 /**
  * Wrap text to fit within maxWidth
+ * Note: Uses rough character-width estimate (0.5 * fontSize)
+ * For more accurate wrapping with proportional fonts, consider using
+ * pdf-lib's text width measurement capabilities
  */
 export function wrapText(
   text: string,
@@ -130,8 +134,11 @@ export function handleMultilineOverflow(
     case 'truncate':
       const truncated = lines.slice(0, maxLines);
       if (truncated.length > 0) {
-        // Add ellipsis to last line
-        truncated[truncated.length - 1] = truncated[truncated.length - 1] + '...';
+        // Add ellipsis to last line if it doesn't already end with one
+        const lastLine = truncated[truncated.length - 1];
+        if (!lastLine.endsWith('...')) {
+          truncated[truncated.length - 1] = lastLine + '...';
+        }
       }
       return truncated;
     
@@ -282,7 +289,8 @@ export async function drawField(
 ): Promise<void> {
   if (field.type === 'checkbox') {
     const boolValue = value === 'true' || value === '1' || (typeof value === 'boolean' && value);
-    await drawCheckbox(page, field, boolValue, pageOffset);
+    const style = field.checkboxStyle || 'X';
+    await drawCheckbox(page, field, boolValue, pageOffset, style);
   } else {
     await drawTextField(page, field, value, pageOffset, maxLines, overflowStrategy);
   }
