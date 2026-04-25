@@ -6,6 +6,7 @@ import { FieldEditor } from './components/FieldEditor';
 import { FieldList } from './components/FieldList';
 import { ExportPanel } from './components/ExportPanel';
 import { ImportPanel } from './components/ImportPanel';
+import { PreviewPanel } from './components/PreviewPanel';
 import { Field, FieldType } from './types/Field';
 import './App.css';
 
@@ -190,6 +191,10 @@ function App() {
 
               <section className="sidebar-section">
                 <ExportPanel fields={fields} />
+              </section>
+              
+              <section className="sidebar-section">
+                <PreviewPanel fields={fields} pdfFile={pdfFile} />
               </section>
             </aside>
 

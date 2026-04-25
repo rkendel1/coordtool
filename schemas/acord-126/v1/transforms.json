@@ -1,0 +1,9 @@
+{
+  "effectiveDate": {
+    "type": "date",
+    "format": "MM/DD/YYYY"
+  },
+  "premium": {
+    "type": "currency"
+  }
+}

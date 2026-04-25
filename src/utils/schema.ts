@@ -11,7 +11,7 @@ export function generateLayout(fields: Field[]): Record<string, LayoutEntry> {
   const layout: Record<string, LayoutEntry> = {};
   for (const f of fields) {
     if (!f.name) continue;
-    layout[f.name] = {
+    const entry: LayoutEntry = {
       page: f.page,
       x: Math.round(f.x),
       y: Math.round(f.y),
@@ -21,6 +21,19 @@ export function generateLayout(fields: Field[]): Record<string, LayoutEntry> {
       fontSize: f.fontSize ?? 10,
       maxWidth: f.maxWidth ?? Math.round(f.width),
     };
+    
+    // Add optional overflow properties
+    if (f.maxLines !== undefined) {
+      entry.maxLines = f.maxLines;
+    }
+    if (f.overflowStrategy) {
+      entry.overflowStrategy = f.overflowStrategy;
+    }
+    if (f.checkboxStyle) {
+      entry.checkboxStyle = f.checkboxStyle;
+    }
+    
+    layout[f.name] = entry;
   }
   return layout;
 }

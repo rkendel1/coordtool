@@ -1,0 +1,62 @@
+{
+  "applicantName": {
+    "page": 0,
+    "x": 118,
+    "y": 712,
+    "width": 260,
+    "height": 14,
+    "type": "text",
+    "fontSize": 10,
+    "maxWidth": 260
+  },
+  "applicantAddress": {
+    "page": 0,
+    "x": 118,
+    "y": 696,
+    "width": 260,
+    "height": 14,
+    "type": "text",
+    "fontSize": 10,
+    "maxWidth": 260
+  },
+  "effectiveDate": {
+    "page": 0,
+    "x": 420,
+    "y": 712,
+    "width": 100,
+    "height": 14,
+    "type": "date",
+    "fontSize": 10,
+    "maxWidth": 100
+  },
+  "policyNumber": {
+    "page": 0,
+    "x": 420,
+    "y": 696,
+    "width": 120,
+    "height": 14,
+    "type": "text",
+    "fontSize": 10,
+    "maxWidth": 120
+  },
+  "premium": {
+    "page": 0,
+    "x": 420,
+    "y": 680,
+    "width": 100,
+    "height": 14,
+    "type": "currency",
+    "fontSize": 10,
+    "maxWidth": 100
+  },
+  "description": {
+    "page": 0,
+    "x": 118,
+    "y": 650,
+    "width": 422,
+    "height": 42,
+    "type": "multiline",
+    "fontSize": 10,
+    "maxWidth": 422
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "applicant.name": {
+    "target": "applicantName",
+    "transform": []
+  },
+  "applicant.address": {
+    "target": "applicantAddress",
+    "transform": []
+  },
+  "policy.effectiveDate": {
+    "target": "effectiveDate",
+    "transform": ["date"]
+  },
+  "policy.number": {
+    "target": "policyNumber",
+    "transform": []
+  },
+  "policy.premium": {
+    "target": "premium",
+    "transform": ["currency"]
+  },
+  "policy.description": {
+    "target": "description",
+    "transform": []
+  }
+}

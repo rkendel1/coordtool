@@ -19,6 +19,9 @@ export interface Field {
   maxWidth?: number;
   multiline?: boolean;
   tableGroup?: string;
+  maxLines?: number; // Phase 2, Item 3: Multiline overflow control
+  overflowStrategy?: 'truncate' | 'shrink' | 'continue'; // Phase 2, Item 3
+  checkboxStyle?: 'X' | 'checkmark' | 'filled'; // Phase 2, Item 6
 }
 
 export interface TableColumn {
@@ -43,6 +46,9 @@ export interface LayoutEntry {
   type: FieldType;
   fontSize: number;
   maxWidth: number;
+  maxLines?: number; // Phase 2, Item 3: Multiline overflow control
+  overflowStrategy?: 'truncate' | 'shrink' | 'continue'; // Phase 2, Item 3
+  checkboxStyle?: 'X' | 'checkmark' | 'filled'; // Phase 2, Item 6
 }
 
 export interface MappingEntry {
