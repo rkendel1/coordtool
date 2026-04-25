@@ -1,0 +1,157 @@
+.preview-panel {
+  padding: 1rem;
+}
+
+.preview-heading {
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem 0;
+  color: #1a1a1a;
+}
+
+.preview-subheading {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 1rem 0 0.5rem 0;
+  color: #333;
+}
+
+.preview-description {
+  margin: 0 0 1rem 0;
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.preview-data-inputs {
+  margin-bottom: 1rem;
+}
+
+.preview-empty {
+  color: #999;
+  font-style: italic;
+  font-size: 0.9rem;
+}
+
+.preview-inputs-list {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  padding: 0.5rem;
+}
+
+.preview-input-row {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.preview-input-row:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.preview-input-label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  margin-bottom: 0.25rem;
+  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.preview-input-type {
+  font-size: 0.75rem;
+  color: #999;
+  font-weight: 400;
+}
+
+.preview-input-text,
+.preview-input-textarea {
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-family: inherit;
+}
+
+.preview-input-text:focus,
+.preview-input-textarea:focus {
+  outline: none;
+  border-color: #4a90e2;
+}
+
+.preview-input-textarea {
+  resize: vertical;
+  min-height: 60px;
+}
+
+.preview-input-checkbox {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+}
+
+.preview-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.preview-button {
+  padding: 0.6rem 1rem;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.preview-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.preview-button-primary {
+  background: #4a90e2;
+  color: white;
+}
+
+.preview-button-primary:hover:not(:disabled) {
+  background: #357abd;
+}
+
+.preview-button-secondary {
+  background: #6c757d;
+  color: white;
+}
+
+.preview-button-secondary:hover {
+  background: #5a6268;
+}
+
+.preview-error {
+  padding: 0.75rem;
+  background: #fee;
+  border: 1px solid #fcc;
+  border-radius: 4px;
+  color: #c33;
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.preview-viewer {
+  margin-top: 1rem;
+}
+
+.preview-iframe {
+  width: 100%;
+  height: 600px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
