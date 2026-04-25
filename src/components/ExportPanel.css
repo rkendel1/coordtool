@@ -1,0 +1,68 @@
+.export-panel {
+  padding: 16px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+}
+
+.ep-title {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0 0 10px;
+  color: #1a1a2e;
+  border-bottom: 2px solid #4a90d9;
+  padding-bottom: 6px;
+}
+
+.ep-warn {
+  font-size: 0.83rem;
+  color: #c07000;
+  background: #fff8e0;
+  border-radius: 5px;
+  padding: 6px 10px;
+  margin: 0 0 8px;
+}
+
+.ep-count {
+  font-size: 0.85rem;
+  color: #555;
+  margin: 0 0 10px;
+}
+
+.ep-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ep-btn {
+  padding: 9px 12px;
+  border: 1px solid #c5d5e8;
+  border-radius: 6px;
+  background: #f4f8ff;
+  color: #1a1a2e;
+  cursor: pointer;
+  font-size: 0.9rem;
+  text-align: left;
+  transition: background 0.2s;
+}
+
+.ep-btn:hover:not(:disabled) {
+  background: #e0ecff;
+}
+
+.ep-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.ep-btn-primary {
+  background: #4a90d9;
+  color: white;
+  border-color: #3070b0;
+  font-weight: 600;
+}
+
+.ep-btn-primary:hover:not(:disabled) {
+  background: #2e70c0;
+}

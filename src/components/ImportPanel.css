@@ -1,0 +1,40 @@
+.import-panel {
+  padding: 16px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+}
+
+.import-title {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0 0 8px;
+  color: #1a1a2e;
+  border-bottom: 2px solid #4a90d9;
+  padding-bottom: 6px;
+}
+
+.import-desc {
+  font-size: 0.8rem;
+  color: #666;
+  margin: 0 0 12px;
+  line-height: 1.4;
+}
+
+.import-btn {
+  display: block;
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid #c5d5e8;
+  border-radius: 6px;
+  background: #f4f8ff;
+  color: #1a1a2e;
+  cursor: pointer;
+  font-size: 0.9rem;
+  text-align: center;
+  transition: background 0.2s;
+}
+
+.import-btn:hover {
+  background: #e0ecff;
+}
