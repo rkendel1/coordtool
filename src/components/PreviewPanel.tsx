@@ -22,6 +22,15 @@ export const PreviewPanel: React.FC<Props> = ({ fields, pdfFile }) => {
   const [autoPreview, setAutoPreview] = useState(false);
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);
 
+  // Cleanup blob URL on unmount
+  useEffect(() => {
+    return () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
+
   const handleDataChange = useCallback((fieldName: string, value: string) => {
     setPreviewData((prev) => ({
       ...prev,
@@ -42,8 +51,16 @@ export const PreviewPanel: React.FC<Props> = ({ fields, pdfFile }) => {
       const transforms = generateTransforms(fields);
       const tables = generateTables(fields);
 
+      console.log('[Preview] Generating PDF with:', {
+        fieldsCount: fields.length,
+        layout: Object.keys(layout),
+        mapping: Object.keys(mapping),
+        previewData,
+      });
+
       // Read PDF template
       const templateBytes = await pdfFile.arrayBuffer();
+      console.log('[Preview] Template size:', templateBytes.byteLength, 'bytes');
 
       // Render PDF with preview data
       const pdfBytes = await renderPdf({
@@ -55,9 +72,13 @@ export const PreviewPanel: React.FC<Props> = ({ fields, pdfFile }) => {
         tables,
       });
 
+      console.log('[Preview] Generated PDF size:', pdfBytes.length, 'bytes');
+
       // Create preview URL
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
+
+      console.log('[Preview] Created blob URL:', url);
 
       // Clean up old URL
       if (previewUrl) {
