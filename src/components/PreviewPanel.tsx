@@ -19,8 +19,17 @@ export const PreviewPanel: React.FC<Props> = ({ fields, pdfFile }) => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [autoPreview, setAutoPreview] = useState(true);
+  const [autoPreview, setAutoPreview] = useState(false);
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);
+
+  // Cleanup blob URL on unmount
+  useEffect(() => {
+    return () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
 
   const handleDataChange = useCallback((fieldName: string, value: string) => {
     setPreviewData((prev) => ({
@@ -54,6 +63,11 @@ export const PreviewPanel: React.FC<Props> = ({ fields, pdfFile }) => {
         data: previewData,
         tables,
       });
+
+      // Validate PDF was generated
+      if (!pdfBytes || pdfBytes.length === 0) {
+        throw new Error('PDF generation produced empty output');
+      }
 
       // Create preview URL
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
