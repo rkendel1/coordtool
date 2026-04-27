@@ -31,7 +31,7 @@ export const PreviewPanel: React.FC<Props> = ({ fields, pdfFile }) => {
   
   // Auto-generate preview when data changes (with debounce)
   useEffect(() => {
-    if (!autoPreview || !pdfFile || !previewUrl) return;
+    if (!autoPreview || !pdfFile) return;
     
     // Clear existing timer
     if (debounceTimer.current) {
@@ -48,7 +48,7 @@ export const PreviewPanel: React.FC<Props> = ({ fields, pdfFile }) => {
         clearTimeout(debounceTimer.current);
       }
     };
-  }, [previewData, autoPreview, pdfFile, previewUrl]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [previewData, autoPreview, pdfFile, handleGeneratePreview]);
 
   const handleGeneratePreview = useCallback(async () => {
     if (!pdfFile) return;
