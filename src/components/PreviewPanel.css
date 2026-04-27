@@ -100,6 +100,8 @@
   display: flex;
   gap: 0.5rem;
   margin-bottom: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
 .preview-button {
@@ -110,6 +112,27 @@
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
+}
+
+.preview-auto-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: #555;
+  cursor: pointer;
+  user-select: none;
+  margin-left: auto;
+}
+
+.preview-auto-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.preview-auto-toggle span {
+  font-weight: 500;
 }
 
 .preview-button:disabled {

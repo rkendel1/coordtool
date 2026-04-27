@@ -3,7 +3,7 @@
  * Implements Phase 2, Item 2: Add preview mode
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Field } from '../types/Field';
 import { generateLayout, generateMapping, generateTransforms, generateTables } from '../utils/schema';
 import { renderPdf } from '../renderer/pdfRenderer';
@@ -19,6 +19,8 @@ export const PreviewPanel: React.FC<Props> = ({ fields, pdfFile }) => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [autoPreview, setAutoPreview] = useState(true);
+  const debounceTimer = useRef<NodeJS.Timeout | null>(null);
 
   const handleDataChange = useCallback((fieldName: string, value: string) => {
     setPreviewData((prev) => ({
@@ -26,6 +28,27 @@ export const PreviewPanel: React.FC<Props> = ({ fields, pdfFile }) => {
       [fieldName]: value,
     }));
   }, []);
+  
+  // Auto-generate preview when data changes (with debounce)
+  useEffect(() => {
+    if (!autoPreview || !pdfFile || !previewUrl) return;
+    
+    // Clear existing timer
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
+    
+    // Set new timer to regenerate preview after 1 second of no changes
+    debounceTimer.current = setTimeout(() => {
+      handleGeneratePreview();
+    }, 1000);
+    
+    return () => {
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
+    };
+  }, [previewData, autoPreview, pdfFile, previewUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleGeneratePreview = useCallback(async () => {
     if (!pdfFile) return;
@@ -147,6 +170,14 @@ export const PreviewPanel: React.FC<Props> = ({ fields, pdfFile }) => {
             💾 Download Preview
           </button>
         )}
+        <label className="preview-auto-toggle">
+          <input
+            type="checkbox"
+            checked={autoPreview}
+            onChange={(e) => setAutoPreview(e.target.checked)}
+          />
+          <span>Auto-update preview</span>
+        </label>
       </div>
 
       {error && (
