@@ -19,7 +19,7 @@ export const PreviewPanel: React.FC<Props> = ({ fields, pdfFile }) => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [autoPreview, setAutoPreview] = useState(true);
+  const [autoPreview, setAutoPreview] = useState(false);
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);
 
   const handleDataChange = useCallback((fieldName: string, value: string) => {
