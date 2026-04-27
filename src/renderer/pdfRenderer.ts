@@ -314,7 +314,8 @@ export async function renderPdf(options: RenderOptions): Promise<Uint8Array> {
   } = options;
   
   // Load the PDF template
-  const pdfDoc = await PDFDocument.load(pdfTemplate);
+  // Support encrypted PDFs by ignoring encryption
+  const pdfDoc = await PDFDocument.load(pdfTemplate, { ignoreEncryption: true });
   const pages = pdfDoc.getPages();
   
   // Render regular fields
