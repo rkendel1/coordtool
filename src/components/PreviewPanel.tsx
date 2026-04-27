@@ -28,27 +28,6 @@ export const PreviewPanel: React.FC<Props> = ({ fields, pdfFile }) => {
       [fieldName]: value,
     }));
   }, []);
-  
-  // Auto-generate preview when data changes (with debounce)
-  useEffect(() => {
-    if (!autoPreview || !pdfFile) return;
-    
-    // Clear existing timer
-    if (debounceTimer.current) {
-      clearTimeout(debounceTimer.current);
-    }
-    
-    // Set new timer to regenerate preview after 1 second of no changes
-    debounceTimer.current = setTimeout(() => {
-      handleGeneratePreview();
-    }, 1000);
-    
-    return () => {
-      if (debounceTimer.current) {
-        clearTimeout(debounceTimer.current);
-      }
-    };
-  }, [previewData, autoPreview, pdfFile, handleGeneratePreview]);
 
   const handleGeneratePreview = useCallback(async () => {
     if (!pdfFile) return;
@@ -93,6 +72,27 @@ export const PreviewPanel: React.FC<Props> = ({ fields, pdfFile }) => {
       setIsGenerating(false);
     }
   }, [pdfFile, fields, previewData, previewUrl]);
+  
+  // Auto-generate preview when data changes (with debounce)
+  useEffect(() => {
+    if (!autoPreview || !pdfFile) return;
+    
+    // Clear existing timer
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
+    
+    // Set new timer to regenerate preview after 1 second of no changes
+    debounceTimer.current = setTimeout(() => {
+      handleGeneratePreview();
+    }, 1000);
+    
+    return () => {
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
+    };
+  }, [previewData, autoPreview, pdfFile, handleGeneratePreview]);
 
   const handleDownload = useCallback(() => {
     if (!previewUrl) return;
