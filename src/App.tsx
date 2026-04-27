@@ -32,6 +32,7 @@ function App() {
   const [gridSize, setGridSize] = useState(4);
   const [enableOCR, setEnableOCR] = useState(false);
   const [enableAutoDetect, setEnableAutoDetect] = useState(false);
+  const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
 
   // Load total pages when file changes
   useEffect(() => {
@@ -141,6 +142,22 @@ function App() {
                 />
                 Debug
               </label>
+              
+              <div className="ctrl-view-toggle">
+                <button
+                  className={`ctrl-toggle-btn ${viewMode === 'edit' ? 'active' : ''}`}
+                  onClick={() => setViewMode('edit')}
+                >
+                  ✏️ Edit
+                </button>
+                <button
+                  className={`ctrl-toggle-btn ${viewMode === 'preview' ? 'active' : ''}`}
+                  onClick={() => setViewMode('preview')}
+                >
+                  👁️ Preview
+                </button>
+              </div>
+              
               <button
                 className="ctrl-reset"
                 onClick={() => {
@@ -163,59 +180,66 @@ function App() {
           </div>
         ) : (
           <div className="workspace">
-            {/* Left sidebar */}
-            <aside className="sidebar">
-              <section className="sidebar-section">
-                <ImportPanel onImport={handleImport} />
-              </section>
-            
-              <section className="sidebar-section">
-                <h2 className="sidebar-heading">Fields ({fields.length})</h2>
-                <FieldList
-                  fields={fields}
-                  selectedId={selectedId}
-                  onSelect={setSelectedId}
-                  onDelete={handleFieldDeleted}
-                />
-              </section>
+            {viewMode === 'edit' ? (
+              <>
+                {/* Left sidebar */}
+                <aside className="sidebar">
+                  <section className="sidebar-section">
+                    <ImportPanel onImport={handleImport} />
+                  </section>
+                
+                  <section className="sidebar-section">
+                    <h2 className="sidebar-heading">Fields ({fields.length})</h2>
+                    <FieldList
+                      fields={fields}
+                      selectedId={selectedId}
+                      onSelect={setSelectedId}
+                      onDelete={handleFieldDeleted}
+                    />
+                  </section>
 
-              {selectedField && (
-                <section className="sidebar-section">
-                  <FieldEditor
-                    field={selectedField}
-                    onChange={handleFieldChanged}
-                    onDelete={handleFieldDeleted}
+                  {selectedField && (
+                    <section className="sidebar-section">
+                      <FieldEditor
+                        field={selectedField}
+                        onChange={handleFieldChanged}
+                        onDelete={handleFieldDeleted}
+                      />
+                    </section>
+                  )}
+
+                  <section className="sidebar-section">
+                    <ExportPanel fields={fields} />
+                  </section>
+                </aside>
+
+                {/* PDF canvas area */}
+                <div className="viewer-wrap">
+                  <PDFViewer
+                    file={pdfFile}
+                    fields={fields}
+                    selectedId={selectedId}
+                    debugMode={debugMode}
+                    defaultType={defaultType}
+                    gridSize={gridSize}
+                    enableOCR={enableOCR}
+                    enableAutoDetect={enableAutoDetect}
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    onPageChange={setCurrentPage}
+                    onFieldAdded={handleFieldAdded}
+                    onFieldSelected={setSelectedId}
                   />
-                </section>
-              )}
-
-              <section className="sidebar-section">
-                <ExportPanel fields={fields} />
-              </section>
-              
-              <section className="sidebar-section">
-                <PreviewPanel fields={fields} pdfFile={pdfFile} />
-              </section>
-            </aside>
-
-            {/* PDF canvas area */}
-            <div className="viewer-wrap">
-              <PDFViewer
-                file={pdfFile}
-                fields={fields}
-                selectedId={selectedId}
-                debugMode={debugMode}
-                defaultType={defaultType}
-                gridSize={gridSize}
-                enableOCR={enableOCR}
-                enableAutoDetect={enableAutoDetect}
-                currentPage={currentPage}
-                totalPages={totalPages}
-                onPageChange={setCurrentPage}
-                onFieldAdded={handleFieldAdded}
-                onFieldSelected={setSelectedId}
-              />
-            </div>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Preview mode - full width */}
+                <div className="preview-wrap">
+                  <PreviewPanel fields={fields} pdfFile={pdfFile} />
+                </div>
+              </>
+            )}
           </div>
         )}
       </main>

@@ -90,6 +90,34 @@
   background: #384070;
 }
 
+.ctrl-view-toggle {
+  display: flex;
+  gap: 4px;
+  border: 1px solid #4a6080;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.ctrl-toggle-btn {
+  padding: 6px 14px;
+  border: none;
+  background: #2a3050;
+  color: #9ab0d0;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ctrl-toggle-btn:hover {
+  background: #384070;
+}
+
+.ctrl-toggle-btn.active {
+  background: #4a90d9;
+  color: white;
+  font-weight: 600;
+}
+
 /* ── Body ──────────────────────────────────── */
 .app-body {
   flex: 1;
@@ -143,4 +171,15 @@
   display: flex;
   justify-content: center;
   align-items: flex-start;
+}
+
+/* ── Preview Wrap ──────────────────────────── */
+.preview-wrap {
+  flex: 1;
+  overflow: auto;
+  padding: 24px;
+  background: white;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
 }

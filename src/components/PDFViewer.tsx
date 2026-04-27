@@ -376,6 +376,12 @@ export const PDFViewer: React.FC<Props> = ({
         suggestedName = labelToFieldName(nearbyLabel);
       }
     }
+    
+    // If no suggested name from OCR, generate a descriptive default
+    if (!suggestedName) {
+      const fieldCount = fields.filter(f => f.page === currentPage - 1).length + 1;
+      suggestedName = `field_page${currentPage}_${fieldCount}`;
+    }
 
     const newField: Field = {
       id: Date.now().toString(),
