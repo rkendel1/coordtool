@@ -106,10 +106,7 @@ export const PreviewPanel: React.FC<Props> = ({ fields, pdfFile }) => {
         clearTimeout(debounceTimer.current);
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    // Note: handleGeneratePreview is intentionally excluded to avoid infinite re-renders
-    // It's stable enough through useCallback and will update correctly when needed
-  }, [previewData, autoPreview, pdfFile]);
+  }, [previewData, autoPreview, pdfFile, handleGeneratePreview]);
 
   const handleDownload = useCallback(() => {
     if (!previewUrl) return;
