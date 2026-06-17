@@ -1,3 +1,4 @@
+[![Try This Software](https://img.shields.io/badge/Try%20This%20Software-evaluate%20%E2%86%92-E3B341?style=flat-square&labelColor=0d1117)](https://trythissoftware.com/github/rkendel1/coordtool)
 # PDF Field Mapper
 
 A visual tool for mapping PDF form fields to structured schemas, with a **bulletproof schema-driven rendering engine**.
