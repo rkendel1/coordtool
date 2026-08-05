@@ -6,8 +6,6 @@
 import { PDFDocument, PDFPage, rgb } from 'pdf-lib';
 import {
   LayoutEntry,
-  MappingSchema,
-  LegacyMappingEntry,
   MappingArtifact,
   MappingTransform,
   TransformEntry,
@@ -23,7 +21,7 @@ export interface PageOffset {
 export interface RenderOptions {
   pdfTemplate: Uint8Array | ArrayBuffer;
   layout: Record<string, LayoutEntry>;
-  mapping: MappingSchema;
+  mapping: MappingArtifact;
   transforms: Record<string, TransformEntry>;
   data: Record<string, any>;
   tables?: Record<string, TableDefinition>;
@@ -32,47 +30,25 @@ export interface RenderOptions {
   overflowStrategy?: 'truncate' | 'shrink' | 'continue'; // Phase 2, Item 3
 }
 
+function toSemanticTransformKey(fieldName: string): string {
+  return fieldName
+    .replace(/[^a-zA-Z0-9]+/g, '.')
+    .replace(/\.+/g, '.')
+    .replace(/^\.|\.$/g, '');
+}
+
 /**
  * Resolve a value from data using the mapping
- * Note: Mapping keys may have 'TODO.' prefix for unmapped/placeholder fields
  */
 export function resolveValue(
-  mapping: MappingSchema,
+  mapping: MappingArtifact,
   data: Record<string, any>,
   fieldName: string
 ): any {
-  if ('mappings' in mapping && Array.isArray(mapping.mappings)) {
-    const mappingEntry = mapping.mappings.find((entry) => entry.target.field === fieldName);
-    if (!mappingEntry) return undefined;
+  const mappingEntry = mapping.mappings.find((entry) => entry.target.field === fieldName);
+  if (!mappingEntry) return undefined;
 
-    const dataPath = mappingEntry.semantic.key;
-    const parts = dataPath.split('.');
-    let value = data;
-
-    for (const part of parts) {
-      if (value === null || value === undefined) {
-        return data[mappingEntry.target.field];
-      }
-      value = value[part];
-    }
-
-    return value ?? data[mappingEntry.target.field];
-  }
-
-  const legacyMapping = mapping as Record<string, LegacyMappingEntry>;
-
-  // Find mapping entry that targets this field
-  const mappingKey = Object.keys(legacyMapping).find(
-    (key) => legacyMapping[key].target === fieldName
-  );
-
-  if (!mappingKey) {
-    return undefined;
-  }
-
-  // Extract the data path from the mapping key
-  // e.g., "applicant.name" from mapping key "applicant.name" or "TODO.applicant.name"
-  const dataPath = mappingKey.replace(/^TODO\./, '');
+  const dataPath = mappingEntry.semantic.key;
   
   // Navigate nested data structure
   const parts = dataPath.split('.');
@@ -80,12 +56,12 @@ export function resolveValue(
   
   for (const part of parts) {
     if (value === null || value === undefined) {
-      return undefined;
+      return data[mappingEntry.target.field];
     }
     value = value[part];
   }
   
-  return value;
+  return value ?? data[mappingEntry.target.field];
 }
 
 /**
@@ -95,9 +71,9 @@ export function applyTransforms(
   fieldName: string,
   value: any,
   transforms: Record<string, TransformEntry>,
-  mapping?: MappingSchema
+  mapping?: MappingArtifact
 ): string {
-  if (mapping && 'mappings' in mapping && Array.isArray(mapping.mappings)) {
+  if (mapping) {
     const mappingEntry = mapping.mappings.find((entry) => entry.target.field === fieldName);
     const mappingTransforms: MappingTransform[] = mappingEntry?.transform ?? [];
     if (mappingTransforms.length > 0) {
@@ -107,7 +83,15 @@ export function applyTransforms(
     }
   }
 
-  const transform = transforms[fieldName];
+  const candidateKeys = [fieldName, toSemanticTransformKey(fieldName)];
+  const mappingEntry = mapping?.mappings.find((entry) => entry.target.field === fieldName);
+  if (mappingEntry?.semantic?.key) {
+    candidateKeys.push(mappingEntry.semantic.key);
+  }
+
+  const transform = candidateKeys
+    .map((key) => transforms[key])
+    .find((entry) => !!entry);
   
   if (!transform) {
     return value === null || value === undefined ? '' : String(value);

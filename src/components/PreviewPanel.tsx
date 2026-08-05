@@ -21,6 +21,12 @@ export const PreviewPanel: React.FC<Props> = ({ fields, pdfFile }) => {
   const [error, setError] = useState<string | null>(null);
   const [autoPreview, setAutoPreview] = useState(false);
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);
+  const validFields = fields.filter(
+    (f) =>
+      f.sourceFieldId.trim() !== '' &&
+      f.semanticKey.trim() !== '' &&
+      f.displayLabel.trim() !== ''
+  );
 
   // Cleanup blob URL on unmount
   useEffect(() => {
@@ -46,10 +52,10 @@ export const PreviewPanel: React.FC<Props> = ({ fields, pdfFile }) => {
 
     try {
       // Generate schemas from fields
-      const layout = generateLayout(fields);
-      const mapping = generateMapping(fields);
-      const transforms = generateTransforms(fields);
-      const tables = generateTables(fields);
+      const layout = generateLayout(validFields);
+      const mapping = generateMapping(validFields);
+      const transforms = generateTransforms(validFields);
+      const tables = generateTables(validFields);
 
       // Read PDF template
       const templateBytes = await pdfFile.arrayBuffer();
@@ -85,7 +91,7 @@ export const PreviewPanel: React.FC<Props> = ({ fields, pdfFile }) => {
     } finally {
       setIsGenerating(false);
     }
-  }, [pdfFile, fields, previewData, previewUrl]);
+  }, [pdfFile, validFields, previewData, previewUrl]);
   
   // Auto-generate preview when data changes (with debounce)
   useEffect(() => {
@@ -117,8 +123,6 @@ export const PreviewPanel: React.FC<Props> = ({ fields, pdfFile }) => {
     a.click();
   }, [previewUrl]);
 
-  const validFields = fields.filter((f) => f.name.trim() !== '');
-
   return (
     <div className="preview-panel">
       <h2 className="preview-heading">Preview Mode</h2>
@@ -135,31 +139,31 @@ export const PreviewPanel: React.FC<Props> = ({ fields, pdfFile }) => {
             {validFields.map((field) => (
               <div key={field.id} className="preview-input-row">
                 <label className="preview-input-label">
-                  {field.name}
+                  {field.displayLabel}
                   <span className="preview-input-type">({field.type})</span>
                 </label>
                 {field.type === 'checkbox' ? (
                   <input
                     type="checkbox"
                     className="preview-input-checkbox"
-                    checked={previewData[field.name] === 'true' || previewData[field.name] === true}
-                    onChange={(e) => handleDataChange(field.name, String(e.target.checked))}
+                    checked={previewData[field.semanticKey] === 'true' || previewData[field.semanticKey] === true}
+                    onChange={(e) => handleDataChange(field.semanticKey, String(e.target.checked))}
                   />
                 ) : field.type === 'multiline' ? (
                   <textarea
                     className="preview-input-textarea"
-                    value={previewData[field.name] || ''}
-                    onChange={(e) => handleDataChange(field.name, e.target.value)}
-                    placeholder={`Enter ${field.name}...`}
+                    value={previewData[field.semanticKey] || ''}
+                    onChange={(e) => handleDataChange(field.semanticKey, e.target.value)}
+                    placeholder={`Enter ${field.displayLabel}...`}
                     rows={3}
                   />
                 ) : (
                   <input
                     type="text"
                     className="preview-input-text"
-                    value={previewData[field.name] || ''}
-                    onChange={(e) => handleDataChange(field.name, e.target.value)}
-                    placeholder={`Enter ${field.name}...`}
+                    value={previewData[field.semanticKey] || ''}
+                    onChange={(e) => handleDataChange(field.semanticKey, e.target.value)}
+                    placeholder={`Enter ${field.displayLabel}...`}
                   />
                 )}
               </div>

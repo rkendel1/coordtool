@@ -66,3 +66,43 @@
 .ep-btn-primary:hover:not(:disabled) {
   background: #2e70c0;
 }
+
+.header-export {
+  position: relative;
+  color: #fff;
+}
+
+.header-export > summary {
+  list-style: none;
+  padding: 6px 12px;
+  border: 1px solid #4a6080;
+  border-radius: 6px;
+  background: #2a3050;
+  color: #dce7f8;
+  font-size: 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.header-export > summary::-webkit-details-marker {
+  display: none;
+}
+
+.header-export > summary::after {
+  content: ' ▾';
+}
+
+.header-export[open] > summary::after {
+  content: ' ▴';
+}
+
+.export-panel-compact {
+  position: absolute;
+  z-index: 200;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 270px;
+  max-height: calc(100vh - 90px);
+  overflow-y: auto;
+  color: #1a1a2e;
+}

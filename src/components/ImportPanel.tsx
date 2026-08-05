@@ -9,6 +9,26 @@ interface Props {
 export const ImportPanel: React.FC<Props> = ({ onImport }) => {
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const toSemanticKey = (fieldId: string): string => {
+    const normalized = fieldId
+      .replace(/[^a-zA-Z0-9]+/g, ' ')
+      .trim()
+      .toLowerCase();
+    const words = normalized.split(/\s+/).filter(Boolean);
+    if (words.length === 0) return 'applicant.field';
+    return `applicant.${words.map((w, i) => (i === 0 ? w : w.charAt(0).toUpperCase() + w.slice(1))).join('')}`;
+  };
+
+  const toDisplayLabel = (fieldId: string): string => {
+    const words = fieldId
+      .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+      .replace(/[^a-zA-Z0-9]+/g, ' ')
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+    return words.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  };
+
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -36,6 +56,9 @@ export const ImportPanel: React.FC<Props> = ({ onImport }) => {
         fields.push({
           id: `imported-${idCounter++}`,
           name,
+          sourceFieldId: name,
+          semanticKey: toSemanticKey(name),
+          displayLabel: toDisplayLabel(name),
           page: entry.page,
           x: entry.x,
           y: entry.y,

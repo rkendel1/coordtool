@@ -1,17 +1,24 @@
 import {
   generateLayout,
+  generateLayoutArtifact,
   generateManifest,
   generateMapping,
+  generateFieldsArtifact,
   generateQuestions,
   generateTransforms,
+  generateTransformsArtifact,
   generateValidation,
+  generateValidationArtifact,
   generateTables,
 } from '../utils/schema';
 import { Field } from '../types/Field';
 
 const makeField = (overrides: Partial<Field> = {}): Field => ({
   id: '1',
-  name: 'testField',
+  name: 'form10page_10test_field0',
+  sourceFieldId: 'form10page_10test_field0',
+  semanticKey: 'applicant.testField',
+  displayLabel: 'Test Field',
   page: 0,
   x: 100,
   y: 700,
@@ -25,9 +32,14 @@ const makeField = (overrides: Partial<Field> = {}): Field => ({
 
 describe('generateLayout', () => {
   it('creates layout entry for a named field', () => {
-    const fields = [makeField({ name: 'applicantName' })];
+    const fields = [
+      makeField({
+        name: 'form10page_10applicant_name0',
+        sourceFieldId: 'form10page_10applicant_name0',
+      }),
+    ];
     const layout = generateLayout(fields);
-    expect(layout['applicantName']).toMatchObject({
+    expect(layout['form10page_10applicant_name0']).toMatchObject({
       page: 0,
       x: 100,
       y: 700,
@@ -40,15 +52,31 @@ describe('generateLayout', () => {
   });
 
   it('skips fields with empty names', () => {
-    const fields = [makeField({ name: '' })];
+    const fields = [makeField({ sourceFieldId: '' })];
     const layout = generateLayout(fields);
     expect(Object.keys(layout)).toHaveLength(0);
   });
 });
 
+describe('generateLayoutArtifact', () => {
+  it('adds schemaVersion envelope to layout export', () => {
+    const fields = [makeField({ sourceFieldId: 'form10page_10applicant_name0' })];
+    const artifact = generateLayoutArtifact(fields);
+
+    expect(artifact.schemaVersion).toBe('1.0');
+    expect(artifact.layout['form10page_10applicant_name0']).toBeDefined();
+  });
+});
+
 describe('generateMapping', () => {
   it('creates mapping scaffold for named fields', () => {
-    const fields = [makeField({ name: 'applicantName' })];
+    const fields = [
+      makeField({
+        sourceFieldId: 'form10page_10applicant_name0',
+        semanticKey: 'applicant.name',
+        displayLabel: 'Applicant Name',
+      }),
+    ];
     const mapping = generateMapping(fields, { capability: 'carrier.form.001' });
 
     expect(mapping).toMatchObject({
@@ -60,42 +88,44 @@ describe('generateMapping', () => {
     expect(mapping.mappings[0]).toMatchObject({
       id: 'mapping-applicant-name',
       semantic: {
-        key: 'party.applicant.name',
+        key: 'applicant.name',
         label: 'Applicant Name',
         type: 'text',
       },
       target: {
-        field: 'applicantName',
-        layoutReference: 'applicantName',
-      },
-      resolution: {
-        priority: ['crm', 'organization.directory', 'user.input'],
+        field: 'form10page_10applicant_name0',
+        layoutReference: 'form10page_10applicant_name0',
       },
       transform: [],
-      confidence: {
-        score: 0.0,
-        status: 'unverified',
-      },
-      status: 'suggested',
-      suggestion: {
-        source: 'crm.applicant.name',
-        confidence: 0.92,
-      },
     });
-    expect(mapping.mappings[0].lifecycle).toEqual({
-      states: ['discovered', 'suggested', 'reviewed', 'validated', 'active'],
-      current: 'suggested',
-    });
+    expect(Object.keys(mapping.mappings[0]).sort()).toEqual([
+      'id',
+      'semantic',
+      'target',
+      'transform',
+    ]);
+  });
+
+  it('infers semantic type as address for address-like fields', () => {
+    const fields = [
+      makeField({
+        sourceFieldId: 'form10page_10mailing_address0',
+        semanticKey: 'applicant.mailingAddress',
+        displayLabel: 'Mailing Address',
+      }),
+    ];
+    const mapping = generateMapping(fields, { capability: 'carrier.form.001' });
+    expect(mapping.mappings[0].semantic.type).toBe('address');
   });
 
   it('skips fields with empty names', () => {
-    const fields = [makeField({ name: '' })];
+    const fields = [makeField({ sourceFieldId: '' })];
     const mapping = generateMapping(fields, { capability: 'carrier.form.001' });
     expect(mapping.mappings).toHaveLength(0);
   });
 
   it('supports custom capability', () => {
-    const fields = [makeField({ name: 'agentsname' })];
+    const fields = [makeField({ sourceFieldId: 'form10page_10agent_name0', semanticKey: 'applicant.agentName', displayLabel: 'Agent Name' })];
     const mapping = generateMapping(fields, { capability: 'carrier.form.130' });
     expect(mapping.capability).toBe('carrier.form.130');
   });
@@ -103,24 +133,77 @@ describe('generateMapping', () => {
 
 describe('generateTransforms', () => {
   it('generates date transform', () => {
-    const fields = [makeField({ name: 'effectiveDate', type: 'date' })];
+    const fields = [makeField({ semanticKey: 'applicant.effectiveDate', type: 'date' })];
     const transforms = generateTransforms(fields);
-    expect(transforms['effectiveDate']).toEqual({
+    expect(transforms['applicant.effectiveDate']).toEqual({
       type: 'date',
       format: 'MM/DD/YYYY',
     });
   });
 
   it('generates currency transform', () => {
-    const fields = [makeField({ name: 'premium', type: 'currency' })];
+    const fields = [makeField({ semanticKey: 'applicant.premium', type: 'currency' })];
     const transforms = generateTransforms(fields);
-    expect(transforms['premium']).toEqual({ type: 'currency' });
+    expect(transforms['applicant.premium']).toEqual({ type: 'currency' });
+  });
+
+  it('uses dotted semantic keys for underscored field names', () => {
+    const fields = [
+      makeField({ semanticKey: 'form10page.10date.of.death0', type: 'date' }),
+    ];
+    const transforms = generateTransforms(fields);
+
+    expect(transforms['form10page.10date.of.death0']).toEqual({
+      type: 'date',
+      format: 'MM/DD/YYYY',
+    });
   });
 
   it('does not generate transform for text fields', () => {
-    const fields = [makeField({ name: 'someText', type: 'text' })];
+    const fields = [makeField({ semanticKey: 'applicant.someText', type: 'text' })];
     const transforms = generateTransforms(fields);
     expect(Object.keys(transforms)).toHaveLength(0);
+  });
+
+  it('supports custom transform selection from field settings', () => {
+    const fields = [
+      makeField({ semanticKey: 'applicant.officePhone', type: 'text', transformType: 'phone' }),
+    ];
+    const transforms = generateTransforms(fields);
+    expect(transforms['applicant.officePhone']).toEqual({
+      type: 'phone',
+      format: '(xxx) xxx-xxxx',
+    });
+  });
+
+  it('supports custom date format from field settings', () => {
+    const fields = [
+      makeField({
+        name: 'effectiveDate',
+        semanticKey: 'applicant.effectiveDate',
+        type: 'date',
+        transformType: 'date',
+        transformFormat: 'YYYY-MM-DD',
+      }),
+    ];
+    const transforms = generateTransforms(fields);
+    expect(transforms['applicant.effectiveDate']).toEqual({
+      type: 'date',
+      format: 'YYYY-MM-DD',
+    });
+  });
+});
+
+describe('generateTransformsArtifact', () => {
+  it('adds schemaVersion envelope to transforms export', () => {
+    const fields = [makeField({ semanticKey: 'applicant.effectiveDate', type: 'date' })];
+    const artifact = generateTransformsArtifact(fields);
+
+    expect(artifact.schemaVersion).toBe('1.0');
+    expect(artifact.transforms['applicant.effectiveDate']).toEqual({
+      type: 'date',
+      format: 'MM/DD/YYYY',
+    });
   });
 });
 
@@ -150,16 +233,17 @@ describe('generateManifest', () => {
 
     expect(manifest).toEqual({
       kind: 'capability',
+      schemaVersion: '1.0',
       id: 'carrier.form.001',
       name: 'CARRIER FORM 001 Completion',
-      version: '1.0.0',
       domain: 'insurance',
       type: 'document-completion',
-      assets: {
+      artifacts: {
         template: 'template.pdf',
         layout: 'layout.json',
         mapping: 'mapping.json',
         transforms: 'transforms.json',
+        fields: 'fields.json',
         questions: 'questions.json',
         validation: 'validation.json',
       },
@@ -178,32 +262,70 @@ describe('generateManifest', () => {
     expect(manifest.id).toBe('carrier.form.130');
     expect(manifest.name).toBe('CARRIER FORM 130 Completion');
   });
+
+  it('infers government domain from capability id', () => {
+    const manifest = generateManifest({ capability: 'va.22-5940' });
+    expect(manifest.domain).toBe('government');
+  });
 });
 
 describe('generateValidation', () => {
-  it('generates required rule for agentsname', () => {
-    const validation = generateValidation([makeField({ name: 'agentsname' })]);
+  it('generates required rules from field.required settings', () => {
+    const validation = generateValidation([
+      makeField({ sourceFieldId: 'form10page_10agent_name0', semanticKey: 'applicant.agentName', required: true }),
+      makeField({ id: '2', sourceFieldId: 'form10page_10producer_name0', semanticKey: 'applicant.producerName', required: false }),
+    ]);
 
     expect(validation).toEqual({
+      schemaVersion: '1.0',
       rules: [
         {
-          field: 'agentsname',
+          field: 'applicant.agentName',
           required: true,
         },
       ],
     });
   });
 
-  it('falls back to agentsname when the field is not present', () => {
-    const validation = generateValidation([makeField({ name: 'producerName' })]);
+  it('returns no rules when no fields are marked required', () => {
+    const validation = generateValidation([makeField({ sourceFieldId: 'form10page_10producer_name0' })]);
 
     expect(validation).toEqual({
-      rules: [
-        {
-          field: 'agentsname',
-          required: true,
-        },
-      ],
+      schemaVersion: '1.0',
+      rules: [],
+    });
+  });
+});
+
+describe('generateValidationArtifact', () => {
+  it('returns schemaVersion envelope for validation export', () => {
+    const artifact = generateValidationArtifact([
+      makeField({ semanticKey: 'applicant.agentName', required: true }),
+    ]);
+    expect(artifact.schemaVersion).toBe('1.0');
+  });
+});
+
+describe('generateFieldsArtifact', () => {
+  it('exports normalized fields.json payload', () => {
+    const artifact = generateFieldsArtifact([
+      makeField({
+        id: 'f-1',
+        sourceFieldId: 'form10page_10agent_name0',
+        semanticKey: 'applicant.agentName',
+        displayLabel: 'Agent Name',
+        required: true,
+      }),
+    ]);
+
+    expect(artifact.schemaVersion).toBe('1.0');
+    expect(artifact.fields).toHaveLength(1);
+    expect(artifact.fields[0]).toMatchObject({
+      id: 'f-1',
+      sourceFieldId: 'form10page_10agent_name0',
+      semanticKey: 'applicant.agentName',
+      displayLabel: 'Agent Name',
+      required: true,
     });
   });
 });
@@ -211,8 +333,8 @@ describe('generateValidation', () => {
 describe('generateQuestions', () => {
   it('generates question schema mapped to field targets', async () => {
     const fields = [
-      makeField({ name: 'agentsname', type: 'text', page: 0 }),
-      makeField({ id: '2', name: 'insuredAddress', type: 'text', page: 1 }),
+      makeField({ sourceFieldId: 'form10page_10agent_name0', semanticKey: 'applicant.agentName', displayLabel: 'Agent Name', type: 'text', page: 0 }),
+      makeField({ id: '2', sourceFieldId: 'form10page_10mailing_address0', semanticKey: 'applicant.mailingAddress', displayLabel: 'Mailing Address', type: 'text', page: 1 }),
     ];
 
     const questionsJson = await generateQuestions(fields, {
@@ -225,42 +347,34 @@ describe('generateQuestions', () => {
     expect(questionsJson.questions).toHaveLength(2);
 
     expect(questionsJson.questions[0]).toMatchObject({
-      id: 'q-agentsname',
-      canonicalKey: 'party.agent.name',
-      label: 'Agentsname',
-      section: 'Applicant Information',
-      required: true,
-      sources: ['crm.customer', 'organization.directory', 'previous_submission'],
-      targetField: 'form.carrierform001.agentsname',
-      completionBehavior: {
-        allowInference: true,
-        allowLookup: true,
-        writesTo: ['form.carrierform001.agentsname'],
-      },
-      questionClass: 'identity',
+      id: 'form10page_10agent_name0',
       field: {
-        canonicalKey: 'party.agent.name',
-        target: 'form.carrierform001.agentsname',
+        semanticKey: 'applicant.agentName',
+        target: 'form10page_10agent_name0',
       },
-      requirements: {
-        required: true,
-        confidenceRequired: 0.95,
+      prompt: {
+        question: 'What is the agent name?',
+        helpText: 'Enter the applicant agent name.',
       },
-      completion: {
-        writesTo: ['form.carrierform001.agentsname'],
+      type: {
+        input: 'text',
       },
+      validation: ['max_length:200'],
     });
 
     expect(questionsJson.questions[1]).toMatchObject({
-      questionClass: 'address',
       field: {
-        target: 'form.carrierform001.insuredaddress',
+        semanticKey: 'applicant.mailingAddress',
+        target: 'form10page_10mailing_address0',
+      },
+      type: {
+        input: 'address',
       },
     });
   });
 
   it('returns empty questions list when there are no named fields', async () => {
-    const questionsJson = await generateQuestions([makeField({ name: '' })], {
+    const questionsJson = await generateQuestions([makeField({ sourceFieldId: '' })], {
       useOllama: false,
     });
 
@@ -271,8 +385,8 @@ describe('generateQuestions', () => {
     });
   });
 
-  it('uses form-specific target prefix from capability', async () => {
-    const fields = [makeField({ name: 'producerName', type: 'text' })];
+  it('does not use capability prefix in question field targets', async () => {
+    const fields = [makeField({ sourceFieldId: 'form10page_10producer_name0', semanticKey: 'applicant.producerName', displayLabel: 'Producer Name', type: 'text' })];
 
     const questionsJson = await generateQuestions(fields, {
       useOllama: false,
@@ -280,23 +394,19 @@ describe('generateQuestions', () => {
     });
 
     expect(questionsJson.capability).toBe('carrier.form.126');
-    expect(questionsJson.questions[0].field.target).toBe('form.carrierform126.producername');
-    expect(questionsJson.questions[0].completion.writesTo).toEqual([
-      'form.carrierform126.producername',
-    ]);
-    expect(questionsJson.questions[0].targetField).toBe('form.carrierform126.producername');
+    expect(questionsJson.questions[0].field.target).toBe('form10page_10producer_name0');
   });
 
   it('maintains semantic key relationship with mappings', async () => {
-    const fields = [makeField({ name: 'agentsname', type: 'text' })];
+    const fields = [makeField({ sourceFieldId: 'form10page_10agent_name0', semanticKey: 'applicant.agentName', displayLabel: 'Agent Name', type: 'text' })];
     const mapping = generateMapping(fields, { capability: 'carrier.form.125' });
     const questionsJson = await generateQuestions(fields, {
       useOllama: false,
       capability: 'carrier.form.125',
     });
 
-    expect(mapping.mappings[0].semantic.key).toBe('party.agent.name');
-    expect(questionsJson.questions[0].field.canonicalKey).toBe('party.agent.name');
-    expect(questionsJson.questions[0].field.target).toBe('form.carrierform125.agentsname');
+    expect(mapping.mappings[0].semantic.key).toBe('applicant.agentName');
+    expect(questionsJson.questions[0].field.semanticKey).toBe('applicant.agentName');
+    expect(questionsJson.questions[0].field.target).toBe('form10page_10agent_name0');
   });
 });

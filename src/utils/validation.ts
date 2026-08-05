@@ -8,7 +8,14 @@ const MIN_WIDTHS: Record<FieldType, number> = {
   multiline: 100,
   checkbox: 12,
   date: 70,
+  dob: 70,
   currency: 60,
+  phone: 95,
+  ssn: 85,
+  ein: 80,
+  zip: 45,
+  signature: 120,
+  initials: 40,
   table: 40,
 };
 

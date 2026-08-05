@@ -3,12 +3,54 @@ export type FieldType =
   | 'multiline'
   | 'checkbox'
   | 'date'
+  | 'dob'
   | 'currency'
+  | 'phone'
+  | 'ssn'
+  | 'ein'
+  | 'zip'
+  | 'signature'
+  | 'initials'
   | 'table';
+
+export type DateFormat =
+  | 'MM/DD/YYYY'
+  | 'DD/MM/YYYY'
+  | 'YYYY-MM-DD'
+  | 'MM/DD/YY'
+  | 'DD/MM/YY'
+  | 'YYYY/MM/DD'
+  | 'MMMM DD, YYYY'
+  | 'MMM DD, YYYY'
+  | 'DD MMMM YYYY'
+  | 'DD MMM YYYY';
+
+export type CurrencySymbolCode =
+  | 'USD'
+  | 'EUR'
+  | 'GBP'
+  | 'JPY'
+  | 'CAD'
+  | 'AUD'
+  | 'CHF'
+  | 'CNY';
+
+export type HeightFormat = 'inches' | 'feet-inches' | 'feet' | 'cm';
+export type HeightStorageUnit = 'inches' | 'cm';
+export type WeightFormat = 'lbs' | 'kg';
+export type WeightStorageUnit = 'lbs' | 'kg';
+export type StateFormat = 'abbreviation' | 'full_name' | 'lowercase';
+export type PhoneFormat = '(xxx) xxx-xxxx' | 'xxx-xxx-xxxx' | 'xxxxxxxxxx';
+export type PresentationSpacingStrategy = 'semantic' | 'template' | 'compact';
+export type PresentationOverflowStrategy = 'reflow' | 'shrink' | 'clip' | 'expand-region';
+export type BoxInputMode = 'digits' | 'alphanumeric' | 'raw';
 
 export interface Field {
   id: string;
   name: string;
+  sourceFieldId: string;
+  semanticKey: string;
+  displayLabel: string;
   page: number;
   x: number;
   y: number;
@@ -22,6 +64,22 @@ export interface Field {
   maxLines?: number; // Phase 2, Item 3: Multiline overflow control
   overflowStrategy?: 'truncate' | 'shrink' | 'continue'; // Phase 2, Item 3
   checkboxStyle?: 'X' | 'checkmark' | 'filled'; // Phase 2, Item 6
+  required?: boolean;
+  transformType?: 'none' | 'date' | 'currency' | 'percentage' | 'phone' | 'height' | 'weight' | 'state';
+  transformFormat?: string;
+  dateFormat?: DateFormat;
+  currencySymbol?: CurrencySymbolCode;
+  heightFormat?: HeightFormat;
+  heightStorageUnit?: HeightStorageUnit;
+  weightFormat?: WeightFormat;
+  weightStorageUnit?: WeightStorageUnit;
+  stateFormat?: StateFormat;
+  phoneFormat?: PhoneFormat;
+  presentationSpacingStrategy?: PresentationSpacingStrategy;
+  presentationOverflowStrategy?: PresentationOverflowStrategy;
+  boxedTextEnabled?: boolean;
+  boxInputMode?: BoxInputMode;
+  boxPattern?: string;
 }
 
 export interface TableColumn {
@@ -51,23 +109,6 @@ export interface LayoutEntry {
   checkboxStyle?: 'X' | 'checkmark' | 'filled'; // Phase 2, Item 6
 }
 
-export interface LegacyMappingEntry {
-  target: string;
-  transform: string[];
-}
-
-export type MappingLifecycleStatus =
-  | 'discovered'
-  | 'suggested'
-  | 'reviewed'
-  | 'validated'
-  | 'active';
-
-export interface MappingResolutionSource {
-  type: 'crm' | 'organization.directory' | 'user.input';
-  path?: string;
-}
-
 export interface MappingTransform {
   type: string;
   format?: string;
@@ -84,24 +125,7 @@ export interface MappingDefinition {
     field: string;
     layoutReference: string;
   };
-  resolution: {
-    sources: MappingResolutionSource[];
-    priority: Array<'crm' | 'organization.directory' | 'user.input'>;
-  };
   transform: MappingTransform[];
-  confidence: {
-    score: number;
-    status: 'unverified' | 'low' | 'medium' | 'high';
-  };
-  status: MappingLifecycleStatus;
-  lifecycle?: {
-    states: MappingLifecycleStatus[];
-    current: MappingLifecycleStatus;
-  };
-  suggestion?: {
-    source: string;
-    confidence: number;
-  };
 }
 
 export interface MappingArtifact {
@@ -110,8 +134,6 @@ export interface MappingArtifact {
   capability: string;
   mappings: MappingDefinition[];
 }
-
-export type MappingSchema = MappingArtifact | Record<string, LegacyMappingEntry>;
 
 export interface TransformEntry {
   type: string;

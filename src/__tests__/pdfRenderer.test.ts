@@ -4,12 +4,22 @@ import {
   wrapText,
   handleMultilineOverflow,
 } from '../renderer/pdfRenderer';
-import { LegacyMappingEntry, MappingArtifact, TransformEntry } from '../types/Field';
+import { MappingArtifact, TransformEntry } from '../types/Field';
 
 describe('resolveValue', () => {
   it('resolves simple data path', () => {
-    const mapping: Record<string, LegacyMappingEntry> = {
-      'applicant.name': { target: 'applicantName', transform: [] },
+    const mapping: MappingArtifact = {
+      schemaVersion: '1.0',
+      artifactType: 'field-mapping',
+      capability: 'carrier.form.001',
+      mappings: [
+        {
+          id: 'mapping-applicant-name',
+          semantic: { key: 'applicant.name', label: 'Applicant Name', type: 'text' },
+          target: { field: 'applicantName', layoutReference: 'applicantName' },
+          transform: [],
+        },
+      ],
     };
     const data = {
       applicant: { name: 'John Doe' },
@@ -19,8 +29,18 @@ describe('resolveValue', () => {
   });
 
   it('resolves nested data path', () => {
-    const mapping: Record<string, LegacyMappingEntry> = {
-      'policy.address.city': { target: 'city', transform: [] },
+    const mapping: MappingArtifact = {
+      schemaVersion: '1.0',
+      artifactType: 'field-mapping',
+      capability: 'carrier.form.001',
+      mappings: [
+        {
+          id: 'mapping-policy-address-city',
+          semantic: { key: 'policy.address.city', label: 'City', type: 'text' },
+          target: { field: 'city', layoutReference: 'city' },
+          transform: [],
+        },
+      ],
     };
     const data = {
       policy: { address: { city: 'New York' } },
@@ -30,15 +50,30 @@ describe('resolveValue', () => {
   });
 
   it('returns undefined for missing mapping', () => {
-    const mapping: Record<string, LegacyMappingEntry> = {};
+    const mapping: MappingArtifact = {
+      schemaVersion: '1.0',
+      artifactType: 'field-mapping',
+      capability: 'carrier.form.001',
+      mappings: [],
+    };
     const data = {};
     
     expect(resolveValue(mapping, data, 'missing')).toBeUndefined();
   });
 
-  it('handles TODO prefix in mapping keys', () => {
-    const mapping: Record<string, LegacyMappingEntry> = {
-      'TODO.applicant.name': { target: 'applicantName', transform: [] },
+  it('handles semantic keys with nested paths', () => {
+    const mapping: MappingArtifact = {
+      schemaVersion: '1.0',
+      artifactType: 'field-mapping',
+      capability: 'carrier.form.001',
+      mappings: [
+        {
+          id: 'mapping-applicant-name',
+          semantic: { key: 'applicant.name', label: 'Applicant Name', type: 'text' },
+          target: { field: 'applicantName', layoutReference: 'applicantName' },
+          transform: [],
+        },
+      ],
     };
     const data = {
       applicant: { name: 'Jane Smith' },
@@ -64,13 +99,7 @@ describe('resolveValue', () => {
             field: 'agentsname',
             layoutReference: 'agentsname',
           },
-          resolution: {
-            sources: [{ type: 'crm', path: 'agent.name' }, { type: 'user.input' }],
-            priority: ['crm', 'organization.directory', 'user.input'],
-          },
           transform: [],
-          confidence: { score: 0, status: 'unverified' },
-          status: 'suggested',
         },
       ],
     };
@@ -116,6 +145,17 @@ describe('applyTransforms', () => {
     
     expect(applyTransforms('field', null, transforms)).toBe('');
     expect(applyTransforms('field', undefined, transforms)).toBe('');
+  });
+
+  it('resolves dotted semantic transform keys for underscored field names', () => {
+    const transforms: Record<string, TransformEntry> = {
+      'form10page.10date.of.death0': { type: 'date', format: 'MM/DD/YYYY' },
+    };
+    const date = new Date('2024-03-15T12:00:00Z');
+
+    expect(
+      applyTransforms('form10page_10date_of_death0', date, transforms)
+    ).toBe('03/15/2024');
   });
 });
 

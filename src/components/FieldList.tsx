@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Field, FieldType } from '../types/Field';
 import './FieldList.css';
 
@@ -7,7 +7,14 @@ const TYPE_BADGE_COLORS: Record<FieldType, string> = {
   multiline: '#32a85c',
   checkbox: '#e08020',
   date: '#8040c0',
+  dob: '#6d4ea6',
   currency: '#d04040',
+  phone: '#2c9c8a',
+  ssn: '#6c757d',
+  ein: '#5f6caf',
+  zip: '#3d7ea6',
+  signature: '#8a6d3b',
+  initials: '#9b59b6',
   table: '#10a0a0',
 };
 
@@ -24,6 +31,12 @@ export const FieldList: React.FC<Props> = ({
   onSelect,
   onDelete,
 }) => {
+  const selectedRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    selectedRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [selectedId]);
+
   if (fields.length === 0) {
     return (
       <div className="field-list-empty">
@@ -37,18 +50,20 @@ export const FieldList: React.FC<Props> = ({
       {fields.map((f) => (
         <div
           key={f.id}
+          ref={f.id === selectedId ? selectedRef : null}
           className={`fl-item${f.id === selectedId ? ' fl-selected' : ''}`}
           onClick={() => onSelect(f.id)}
+          aria-selected={f.id === selectedId}
         >
-          <div className="fl-name">{f.name || <em>(unnamed)</em>}</div>
-          <div className="fl-meta">
-            <span
-              className="fl-badge"
-              style={{ background: TYPE_BADGE_COLORS[f.type] }}
-            >
-              {f.type}
-            </span>
-            <span className="fl-page">pg {f.page}</span>
+          <span
+            className="fl-badge"
+            style={{ background: TYPE_BADGE_COLORS[f.type] }}
+          >
+            {f.type}
+          </span>
+          <span className="fl-page">p{f.page + 1}</span>
+          <div className="fl-name" title={f.sourceFieldId}>
+            {f.sourceFieldId || f.displayLabel || <em>(unlabeled)</em>}
           </div>
           <button
             className="fl-del"

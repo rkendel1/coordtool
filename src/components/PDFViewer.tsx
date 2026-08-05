@@ -9,6 +9,7 @@ import { Field, FieldType } from '../types/Field';
 import { snapRectToGrid } from '../utils/grid';
 import { isOverflowRisk } from '../utils/validation';
 import { OCRWord, extractTextWithOCR, findNearbyLabel, labelToFieldName } from '../utils/ocr';
+import { detectFieldRegions } from '../utils/fieldDetection';
 import './PDFViewer.css';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `${process.env.PUBLIC_URL}/pdf.worker.min.mjs`;
@@ -20,7 +21,14 @@ const TYPE_COLORS: Record<FieldType, string> = {
   multiline: 'rgba(80, 200, 120, 0.35)',
   checkbox: 'rgba(255, 160, 60, 0.35)',
   date: 'rgba(160, 100, 220, 0.35)',
+  dob: 'rgba(140, 110, 200, 0.35)',
   currency: 'rgba(240, 80, 80, 0.35)',
+  phone: 'rgba(60, 170, 155, 0.35)',
+  ssn: 'rgba(108, 117, 125, 0.35)',
+  ein: 'rgba(95, 108, 175, 0.35)',
+  zip: 'rgba(61, 126, 166, 0.35)',
+  signature: 'rgba(138, 109, 59, 0.35)',
+  initials: 'rgba(155, 89, 182, 0.35)',
   table: 'rgba(30, 200, 200, 0.35)',
 };
 
@@ -29,9 +37,39 @@ const TYPE_STROKE: Record<FieldType, string> = {
   multiline: '#32a85c',
   checkbox: '#e08020',
   date: '#8040c0',
+  dob: '#6d4ea6',
   currency: '#d04040',
+  phone: '#2c9c8a',
+  ssn: '#6c757d',
+  ein: '#5f6caf',
+  zip: '#3d7ea6',
+  signature: '#8a6d3b',
+  initials: '#9b59b6',
   table: '#10a0a0',
 };
+
+function toSemanticKeyFromFieldId(fieldId: string): string {
+  const normalized = fieldId
+    .replace(/[^a-zA-Z0-9]+/g, ' ')
+    .trim()
+    .toLowerCase();
+  const words = normalized.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return 'applicant.field';
+  const key = words
+    .map((w, i) => (i === 0 ? w : w.charAt(0).toUpperCase() + w.slice(1)))
+    .join('');
+  return `applicant.${key}`;
+}
+
+function toDisplayLabelFromFieldId(fieldId: string): string {
+  const words = fieldId
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[^a-zA-Z0-9]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  return words.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+}
 
 interface DrawRect {
   startX: number;
@@ -40,11 +78,55 @@ interface DrawRect {
   endY: number;
 }
 
+interface NativeDetectionResult {
+  count: number;
+  regions: Array<{ x: number; y: number; width: number; height: number }>;
+}
+
+async function extractEmbeddedPdfWords(
+  page: pdfjsLib.PDFPageProxy,
+  viewport: pdfjsLib.PageViewport
+): Promise<OCRWord[]> {
+  const content = await page.getTextContent();
+  return content.items.flatMap((rawItem: any) => {
+    const text = typeof rawItem.str === 'string' ? rawItem.str.trim() : '';
+    if (!text || !rawItem.transform) return [];
+    const [x, baselineY] = viewport.convertToViewportPoint(
+      rawItem.transform[4], rawItem.transform[5]
+    );
+    const height = Math.max(1, Math.abs(rawItem.height || rawItem.transform[3] || 8) * viewport.scale);
+    return [{
+      text,
+      x,
+      y: baselineY - height,
+      width: Math.max(1, Math.abs(rawItem.width || 1) * viewport.scale),
+      height,
+      confidence: 100,
+    }];
+  });
+}
+
+function overlapsExistingRegion(
+  candidate: { x: number; y: number; width: number; height: number },
+  regions: NativeDetectionResult['regions']
+): boolean {
+  return regions.some((region) => {
+    const intersectionWidth = Math.max(0,
+      Math.min(candidate.x + candidate.width, region.x + region.width) - Math.max(candidate.x, region.x));
+    const intersectionHeight = Math.max(0,
+      Math.min(candidate.y + candidate.height, region.y + region.height) - Math.max(candidate.y, region.y));
+    const intersection = intersectionWidth * intersectionHeight;
+    const smallerArea = Math.min(candidate.width * candidate.height, region.width * region.height);
+    return smallerArea > 0 && intersection / smallerArea >= 0.35;
+  });
+}
+
 interface Props {
   file: File;
   fields: Field[];
   selectedId: string | null;
   debugMode: boolean;
+  showFieldOverlays: boolean;
   defaultType: FieldType;
   currentPage: number;
   totalPages: number;
@@ -62,6 +144,7 @@ export const PDFViewer: React.FC<Props> = ({
   fields,
   selectedId,
   debugMode,
+  showFieldOverlays,
   defaultType,
   currentPage,
   totalPages,
@@ -80,6 +163,7 @@ export const PDFViewer: React.FC<Props> = ({
   const pageRef = useRef<pdfjsLib.PDFPageProxy | null>(null);
   const [drawing, setDrawing] = useState<DrawRect | null>(null);
   const [ocrWords, setOcrWords] = useState<OCRWord[]>([]);
+  const [ocrStatus, setOcrStatus] = useState('');
   const [shiftPressed, setShiftPressed] = useState(false);
   const isMouseDown = useRef(false);
 
@@ -144,38 +228,102 @@ export const PDFViewer: React.FC<Props> = ({
     const ctx = canvas.getContext('2d')!;
     await page.render({ canvas, canvasContext: ctx, viewport }).promise;
     
-    // Auto-detect PDF form fields (AcroForm)
-    if (enableAutoDetect) {
-      await autoDetectFormFields(page, viewport, pageNum - 1);
+    // Auto-detect native widgets first, then printed/flattened form cells.
+    const nativeDetection = (enableAutoDetect || enableOCR)
+      ? await autoDetectFormFields(page, viewport, pageNum - 1)
+      : { count: 0, regions: [] };
+    if ((enableAutoDetect || enableOCR) && nativeDetection.count > 0) {
+      setOcrStatus(`Found ${nativeDetection.count} native PDF fields`);
     }
     
-    // Run OCR if enabled
-    if (enableOCR && canvas) {
+    // Every auto-detect run is hybrid. Digital PDFs use their fast, precise
+    // text layer; WASM OCR is a fallback only for image-only pages.
+    if ((enableOCR || enableAutoDetect) && canvas) {
       try {
-        const words = await extractTextWithOCR(canvas);
+        setOcrStatus('Analyzing embedded PDF geometry…');
+        let words = await extractEmbeddedPdfWords(page, viewport);
+        let source = 'PDF geometry';
+        if (words.length < 10) {
+          setOcrStatus('Image-only page — analyzing with WASM OCR…');
+          words = await extractTextWithOCR(canvas);
+          source = 'WASM OCR';
+        }
         setOcrWords(words);
+        const detected = autoDetectFlatFields(
+          canvas, viewport, pageNum - 1, words, nativeDetection.regions
+        );
+        setOcrStatus(nativeDetection.count > 0
+          ? `Kept ${nativeDetection.count} native fields; added ${detected} from ${source}`
+          : `Added ${detected} fields from ${source}`);
         if (onOCRProgress) onOCRProgress(100);
       } catch (err) {
         console.error('OCR failed:', err);
         setOcrWords([]);
+        setOcrStatus('OCR failed — check the browser console for details');
       }
-    } else {
+    } else if (nativeDetection.count === 0) {
       setOcrWords([]);
+      setOcrStatus('');
     }
     
     drawOverlay();
+  };
+
+  const autoDetectFlatFields = (
+    canvas: HTMLCanvasElement,
+    viewport: pdfjsLib.PageViewport,
+    pageIndex: number,
+    words: OCRWord[],
+    nativeRegions: NativeDetectionResult['regions'] = []
+  ): number => {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return 0;
+    const regions = detectFieldRegions(ctx.getImageData(0, 0, canvas.width, canvas.height), words);
+    let added = 0;
+    regions.forEach((region, index) => {
+      const pdfX = region.x / SCALE;
+      const pdfY = (viewport.height - region.y - region.height) / SCALE;
+      const width = region.width / SCALE;
+      const height = region.height / SCALE;
+      if (overlapsExistingRegion({ x: pdfX, y: pdfY, width, height }, nativeRegions)) return;
+      if (fields.some(f => f.page === pageIndex && Math.abs(f.x - pdfX) < 4 && Math.abs(f.y - pdfY) < 4)) return;
+      const name = region.label || `detected_page${pageIndex + 1}_${index + 1}`;
+      onFieldAdded({
+        id: `flat-${pageIndex}-${Math.round(pdfX)}-${Math.round(pdfY)}`,
+        name, sourceFieldId: name, semanticKey: toSemanticKeyFromFieldId(name),
+        displayLabel: toDisplayLabelFromFieldId(name), page: pageIndex,
+        x: pdfX, y: pdfY, width, height,
+        type: width <= 18 && height <= 18
+          ? 'checkbox'
+          : /date/i.test(name)
+            ? 'date'
+            : /premium|amount|limit|deposit/i.test(name)
+              ? 'currency'
+              : 'text',
+        fontSize: 10, maxWidth: width,
+      });
+      added++;
+    });
+    return added;
   };
 
   const autoDetectFormFields = async (
     page: pdfjsLib.PDFPageProxy,
     viewport: pdfjsLib.PageViewport,
     pageIndex: number
-  ) => {
+  ): Promise<NativeDetectionResult> => {
     try {
       const annotations = await page.getAnnotations();
       const formFields = annotations.filter((ann: any) => 
         ann.subtype === 'Widget' && ann.fieldType
       );
+      const nativeRegions = formFields.map((ann: any) => {
+        const [x1, y1, x2, y2] = ann.rect;
+        return {
+          x: Math.min(x1, x2), y: Math.min(y1, y2),
+          width: Math.abs(x2 - x1), height: Math.abs(y2 - y1),
+        };
+      });
       
       for (const ann of formFields) {
         // Check if this field already exists (by approximate position)
@@ -204,6 +352,9 @@ export const PDFViewer: React.FC<Props> = ({
         const newField: Field = {
           id: `auto-${Date.now()}-${Math.random()}`,
           name: fieldName,
+          sourceFieldId: fieldName,
+          semanticKey: toSemanticKeyFromFieldId(fieldName),
+          displayLabel: toDisplayLabelFromFieldId(fieldName),
           page: pageIndex,
           x: x1,
           y: y1,
@@ -216,8 +367,10 @@ export const PDFViewer: React.FC<Props> = ({
         
         onFieldAdded(newField);
       }
+      return { count: formFields.length, regions: nativeRegions };
     } catch (err) {
       console.error('Auto-detect failed:', err);
+      return { count: 0, regions: [] };
     }
   };
 
@@ -230,7 +383,7 @@ export const PDFViewer: React.FC<Props> = ({
     ctx.clearRect(0, 0, overlay.width, overlay.height);
 
     // Draw saved fields
-    for (const f of fields) {
+    for (const f of showFieldOverlays ? fields : []) {
       if (f.page !== currentPage - 1) continue;
       const canvasX = f.x * SCALE;
       const canvasY = viewport.height - (f.y + f.height) * SCALE;
@@ -250,6 +403,10 @@ export const PDFViewer: React.FC<Props> = ({
       ctx.strokeRect(canvasX, canvasY, canvasW, canvasH);
 
       // Label
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(canvasX, canvasY, canvasW, canvasH);
+      ctx.clip();
       ctx.fillStyle = hasOverflow ? '#ff0000' : '#1a1a2e';
       ctx.font = hasOverflow ? 'bold 10px monospace' : '10px monospace';
       ctx.fillText(f.name || '(unnamed)', canvasX + 3, canvasY + 13);
@@ -269,6 +426,7 @@ export const PDFViewer: React.FC<Props> = ({
           ctx.fillText('⚠ OVERFLOW RISK', canvasX + 3, canvasY + canvasH - 15);
         }
       }
+      ctx.restore();
     }
 
     // Draw current drawing rect
@@ -283,7 +441,7 @@ export const PDFViewer: React.FC<Props> = ({
       ctx.strokeRect(x, y, w, h);
       ctx.setLineDash([]);
     }
-  }, [fields, currentPage, selectedId, debugMode, drawing]);
+  }, [fields, currentPage, selectedId, debugMode, drawing, showFieldOverlays]);
 
   // Redraw overlay whenever fields/drawing change
   useEffect(() => {
@@ -306,7 +464,7 @@ export const PDFViewer: React.FC<Props> = ({
     const viewport = viewportRef.current;
     if (!viewport) return;
 
-    for (const f of fields) {
+    for (const f of showFieldOverlays ? fields : []) {
       if (f.page !== currentPage - 1) continue;
       const canvasX = f.x * SCALE;
       const canvasY = viewport.height - (f.y + f.height) * SCALE;
@@ -386,6 +544,9 @@ export const PDFViewer: React.FC<Props> = ({
     const newField: Field = {
       id: Date.now().toString(),
       name: suggestedName,
+      sourceFieldId: suggestedName,
+      semanticKey: toSemanticKeyFromFieldId(suggestedName),
+      displayLabel: toDisplayLabelFromFieldId(suggestedName),
       page: currentPage - 1,
       x: pdfX,
       y: pdfY,
@@ -403,6 +564,7 @@ export const PDFViewer: React.FC<Props> = ({
   return (
     <div className="pdf-viewer">
       <div className="pdf-canvas-wrap">
+        {ocrStatus && <div className="pdf-ocr-status" role="status">{ocrStatus}</div>}
         <canvas ref={canvasRef} className="pdf-canvas" />
         <canvas
           ref={overlayRef}
@@ -440,7 +602,7 @@ export const PDFViewer: React.FC<Props> = ({
           🔲 Snap-to-grid active ({gridSize}px grid)
         </div>
       )}
-      {enableOCR && ocrWords.length > 0 && (
+      {(enableOCR || enableAutoDetect) && ocrWords.length > 0 && (
         <div className="pdf-hint">
           📝 OCR detected {ocrWords.length} words (proximity labeling enabled)
         </div>

@@ -1,7 +1,7 @@
 .field-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 3px;
   max-height: 300px;
   overflow-y: auto;
 }
@@ -16,8 +16,9 @@
 .fl-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
+  gap: 6px;
+  min-height: 27px;
+  padding: 3px 7px;
   border: 1px solid #e0e8f0;
   border-radius: 6px;
   background: #fafcff;
@@ -36,7 +37,7 @@
 
 .fl-name {
   flex: 1;
-  font-size: 0.9rem;
+  font-size: 0.79rem;
   font-weight: 500;
   color: #1a1a2e;
   min-width: 0;
@@ -50,24 +51,18 @@
   font-style: italic;
 }
 
-.fl-meta {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
 .fl-badge {
   color: white;
-  font-size: 0.72rem;
+  font-size: 0.62rem;
   font-weight: 600;
-  padding: 2px 6px;
+  padding: 1px 5px;
   border-radius: 10px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
 .fl-page {
-  font-size: 0.75rem;
+  font-size: 0.68rem;
   color: #888;
 }
 
@@ -76,8 +71,8 @@
   border: none;
   color: #bbb;
   cursor: pointer;
-  font-size: 0.85rem;
-  padding: 2px 4px;
+  font-size: 0.72rem;
+  padding: 1px 3px;
   border-radius: 3px;
   transition: color 0.15s, background 0.15s;
 }

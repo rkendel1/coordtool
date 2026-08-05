@@ -19,6 +19,9 @@ describe('Preview PDF Generation', () => {
       {
         id: '1',
         name: 'testCheckbox',
+        sourceFieldId: 'testCheckbox',
+        semanticKey: 'applicant.testCheckbox',
+        displayLabel: 'Test Checkbox',
         page: 0,
         x: 100,
         y: 700,
@@ -71,6 +74,9 @@ describe('Preview PDF Generation', () => {
       {
         id: '1',
         name: 'testField',
+        sourceFieldId: 'testField',
+        semanticKey: 'applicant.testField',
+        displayLabel: 'Test Field',
         page: 0,
         x: 100,
         y: 700,
@@ -123,6 +129,9 @@ describe('Preview PDF Generation', () => {
       {
         id: '1',
         name: 'field1',
+        sourceFieldId: 'field1',
+        semanticKey: 'applicant.field1',
+        displayLabel: 'Field 1',
         page: 0,
         x: 100,
         y: 700,

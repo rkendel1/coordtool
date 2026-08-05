@@ -1,5 +1,29 @@
 import Tesseract from 'tesseract.js';
 
+let workerPromise: ReturnType<typeof Tesseract.createWorker> | null = null;
+
+function getOCRWorker() {
+  if (!workerPromise) {
+    const publicRoot = process.env.PUBLIC_URL || '';
+    workerPromise = Tesseract.createWorker('eng', undefined, {
+      // Keep every OCR runtime asset same-origin. Using the explicit loader
+      // (rather than the *.wasm.js single-file build) makes the browser fetch
+      // and instantiate the compiled .wasm binary in public/tesseract/core.
+      corePath: `${publicRoot}/tesseract/core/tesseract-core-simd-lstm.js`,
+      workerPath: `${publicRoot}/tesseract/worker/worker.min.js`,
+      langPath: `${publicRoot}/tesseract/lang`,
+      gzip: true,
+      workerBlobURL: false,
+      logger: (m) => {
+        if (m.status === 'recognizing text') {
+          console.log(`OCR progress: ${Math.round(m.progress * 100)}%`);
+        }
+      },
+    });
+  }
+  return workerPromise;
+}
+
 /**
  * Extract text from a PDF page using OCR.
  * Returns bounding boxes with text content.
@@ -14,23 +38,24 @@ export interface OCRWord {
 }
 
 export async function extractTextWithOCR(
-  canvas: HTMLCanvasElement
+  canvas: HTMLCanvasElement,
+  timeoutMs = 30000
 ): Promise<OCRWord[]> {
-  const result = await Tesseract.recognize(canvas, 'eng', {
-    logger: (m) => {
-      // Optional: log progress
-      if (m.status === 'recognizing text') {
-        console.log(`OCR progress: ${Math.round(m.progress * 100)}%`);
-      }
-    },
-  });
+  const worker = await getOCRWorker();
+  // Tesseract 6+ disables granular output unless explicitly requested.
+  const result = await Promise.race([
+    worker.recognize(canvas, {}, { text: true, blocks: true }),
+    new Promise<never>((_, reject) => window.setTimeout(
+      () => reject(new Error('WASM OCR timed out')), timeoutMs
+    )),
+  ]);
 
   const words: OCRWord[] = [];
-  const data = result.data as any;
-  
-  // Extract word-level bounding boxes
-  if (data.words && Array.isArray(data.words)) {
-    for (const word of data.words) {
+  const blocks = result.data.blocks || [];
+  for (const block of blocks) {
+    for (const paragraph of block.paragraphs || []) {
+      for (const line of paragraph.lines || []) {
+        for (const word of line.words || []) {
       if (word.text && word.text.trim().length > 0 && word.bbox) {
         words.push({
           text: word.text.trim(),
@@ -40,6 +65,8 @@ export async function extractTextWithOCR(
           height: word.bbox.y1 - word.bbox.y0,
           confidence: word.confidence || 0,
         });
+      }
+        }
       }
     }
   }

@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { Field } from '../types/Field';
 import {
-  generateLayout,
+  generateLayoutArtifact,
   generateManifest,
   generateMapping,
+  generateFieldsArtifact,
   generateQuestions,
-  generateTransforms,
-  generateValidation,
+  generateTransformsArtifact,
+  generateValidationArtifact,
   generateTables,
   downloadJson,
 } from '../utils/schema';
@@ -15,19 +16,26 @@ import './ExportPanel.css';
 interface Props {
   fields: Field[];
   capabilityId?: string;
+  compact?: boolean;
 }
 
 export const ExportPanel: React.FC<Props> = ({
   fields,
   capabilityId = '',
+  compact = false,
 }) => {
   const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false);
-  const validFields = fields.filter((f) => f.name.trim() !== '');
+  const validFields = fields.filter(
+    (f) =>
+      f.sourceFieldId.trim() !== '' &&
+      f.semanticKey.trim() !== '' &&
+      f.displayLabel.trim() !== ''
+  );
   const normalizedCapability = capabilityId.trim().toLowerCase();
   const canExport = validFields.length > 0 && normalizedCapability.length > 0;
 
   const handleExportLayout = () => {
-    downloadJson(generateLayout(validFields), 'layout.json');
+    downloadJson(generateLayoutArtifact(validFields), 'layout.json');
   };
 
   const handleExportMapping = () => {
@@ -35,7 +43,11 @@ export const ExportPanel: React.FC<Props> = ({
   };
 
   const handleExportTransforms = () => {
-    downloadJson(generateTransforms(validFields), 'transforms.json');
+    downloadJson(generateTransformsArtifact(validFields), 'transforms.json');
+  };
+
+  const handleExportFields = () => {
+    downloadJson(generateFieldsArtifact(validFields), 'fields.json');
   };
 
   const handleExportManifest = () => {
@@ -43,7 +55,7 @@ export const ExportPanel: React.FC<Props> = ({
   };
 
   const handleExportValidation = () => {
-    downloadJson(generateValidation(validFields), 'validation.json');
+    downloadJson(generateValidationArtifact(validFields), 'validation.json');
   };
 
   const handleExportQuestions = async () => {
@@ -70,12 +82,13 @@ export const ExportPanel: React.FC<Props> = ({
         capability: normalizedCapability,
       });
       const schema = {
-        layout: generateLayout(validFields),
+        layout: generateLayoutArtifact(validFields),
         mapping: generateMapping(validFields, { capability: normalizedCapability }),
-        transforms: generateTransforms(validFields),
+        transforms: generateTransformsArtifact(validFields),
+        fields: generateFieldsArtifact(validFields),
         tables: generateTables(validFields),
         manifest: generateManifest({ capability: normalizedCapability }),
-        validation: generateValidation(validFields),
+        validation: generateValidationArtifact(validFields),
         questions,
       };
       downloadJson(schema, 'schema.json');
@@ -87,20 +100,25 @@ export const ExportPanel: React.FC<Props> = ({
     }
   };
 
-  const unnamed = fields.filter((f) => !f.name.trim()).length;
+  const incomplete = fields.filter(
+    (f) =>
+      !f.sourceFieldId.trim() ||
+      !f.semanticKey.trim() ||
+      !f.displayLabel.trim()
+  ).length;
 
-  return (
-    <div className="export-panel">
+  const panel = (
+    <div className={`export-panel${compact ? ' export-panel-compact' : ''}`}>
       <h3 className="ep-title">Export</h3>
 
-      {unnamed > 0 && (
+      {incomplete > 0 && (
         <p className="ep-warn">
-          ⚠️ {unnamed} field{unnamed > 1 ? 's' : ''} missing a name — skipped in export.
+          ⚠️ {incomplete} field{incomplete > 1 ? 's' : ''} missing sourceFieldId, semanticKey, or displayLabel — skipped in export.
         </p>
       )}
 
       <p className="ep-count">
-        {validFields.length} named field{validFields.length !== 1 ? 's' : ''} ready
+        {validFields.length} field{validFields.length !== 1 ? 's' : ''} ready
       </p>
 
       {normalizedCapability.length === 0 && (
@@ -131,6 +149,14 @@ export const ExportPanel: React.FC<Props> = ({
           title="Download transforms.json — format rules"
         >
           🔧 transforms.json
+        </button>
+        <button
+          className="ep-btn"
+          onClick={handleExportFields}
+          disabled={!canExport}
+          title="Download fields.json — semantic/physical field registry"
+        >
+          🧾 fields.json
         </button>
         <button
           className="ep-btn"
@@ -167,4 +193,15 @@ export const ExportPanel: React.FC<Props> = ({
       </div>
     </div>
   );
+
+  if (compact) {
+    return (
+      <details className="header-export">
+        <summary>Export ({validFields.length})</summary>
+        {panel}
+      </details>
+    );
+  }
+
+  return panel;
 };

@@ -5,9 +5,10 @@ import { PDFViewer } from './components/PDFViewer';
 import { FieldEditor } from './components/FieldEditor';
 import { FieldList } from './components/FieldList';
 import { ExportPanel } from './components/ExportPanel';
-import { ImportPanel } from './components/ImportPanel';
 import { PreviewPanel } from './components/PreviewPanel';
 import { Field, FieldType } from './types/Field';
+import { inferCapabilityId } from './utils/capability';
+import { ensureUniqueFieldName } from './utils/fieldNames';
 import './App.css';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `${process.env.PUBLIC_URL}/pdf.worker.min.mjs`;
@@ -17,7 +18,14 @@ const FIELD_TYPES: FieldType[] = [
   'multiline',
   'checkbox',
   'date',
+  'dob',
   'currency',
+  'phone',
+  'ssn',
+  'ein',
+  'zip',
+  'signature',
+  'initials',
   'table',
 ];
 
@@ -31,7 +39,8 @@ function App() {
   const [defaultType, setDefaultType] = useState<FieldType>('text');
   const [gridSize, setGridSize] = useState(4);
   const [enableOCR, setEnableOCR] = useState(false);
-  const [enableAutoDetect, setEnableAutoDetect] = useState(false);
+  const [enableAutoDetect, setEnableAutoDetect] = useState(true);
+  const [showFieldOverlays, setShowFieldOverlays] = useState(true);
   const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
   const [capabilityId, setCapabilityId] = useState('');
 
@@ -45,6 +54,15 @@ function App() {
         if (cancelled) return;
         setTotalPages(pdf.numPages);
         setCurrentPage(1);
+        pdf.getPage(1).then(page => page.getTextContent()).then(content => {
+          if (cancelled) return;
+          const text = content.items
+            .map((item: any) => typeof item.str === 'string' ? item.str : '')
+            .join(' ');
+          setCapabilityId(inferCapabilityId(pdfFile.name, text));
+        }).catch(() => {
+          if (!cancelled) setCapabilityId(inferCapabilityId(pdfFile.name));
+        });
       });
     });
     return () => { cancelled = true; };
@@ -55,11 +73,24 @@ function App() {
     setFields([]);
     setSelectedId(null);
     setCurrentPage(1);
+    setEnableAutoDetect(true);
+    setShowFieldOverlays(true);
+    setCapabilityId(inferCapabilityId(file.name));
   }, []);
 
   const handleFieldAdded = useCallback((field: Field) => {
-    setFields((prev) => [...prev, field]);
-    setSelectedId(field.id);
+    setFields((prev) => {
+      const duplicate = prev.some((existing) =>
+        existing.id === field.id ||
+        (existing.page === field.page &&
+          Math.abs(existing.x - field.x) < 4 &&
+          Math.abs(existing.y - field.y) < 4 &&
+          Math.abs(existing.width - field.width) < 6 &&
+          Math.abs(existing.height - field.height) < 6)
+      );
+      return duplicate ? prev : [...prev, ensureUniqueFieldName(field, prev)];
+    });
+    setSelectedId((current) => current ?? field.id);
   }, []);
 
   const handleFieldChanged = useCallback((updated: Field) => {
@@ -70,11 +101,19 @@ function App() {
     setFields((prev) => prev.filter((f) => f.id !== id));
     setSelectedId((prev) => (prev === id ? null : prev));
   }, []);
-  
-  const handleImport = useCallback((importedFields: Field[]) => {
-    setFields(importedFields);
-    setSelectedId(null);
-  }, []);
+
+  useEffect(() => {
+    const handleDeleteKey = (event: KeyboardEvent) => {
+      if (!selectedId || viewMode !== 'edit' ||
+          (event.key !== 'Delete' && event.key !== 'Backspace')) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.matches('input, textarea, select, [contenteditable="true"]')) return;
+      event.preventDefault();
+      handleFieldDeleted(selectedId);
+    };
+    window.addEventListener('keydown', handleDeleteKey);
+    return () => window.removeEventListener('keydown', handleDeleteKey);
+  }, [selectedId, viewMode, handleFieldDeleted]);
 
   const selectedField = fields.find((f) => f.id === selectedId) ?? null;
 
@@ -104,7 +143,7 @@ function App() {
                 ))}
               </select>
 
-              <label className="ctrl-label">Capability:</label>
+              <label className="ctrl-label">Capability (inferred):</label>
               <input
                 className="ctrl-select"
                 type="text"
@@ -133,7 +172,7 @@ function App() {
                   checked={enableOCR}
                   onChange={(e) => setEnableOCR(e.target.checked)}
                 />
-                OCR
+                OCR fallback
               </label>
               
               <label className="ctrl-check">
@@ -153,6 +192,15 @@ function App() {
                 />
                 Debug
               </label>
+
+              <label className="ctrl-check">
+                <input
+                  type="checkbox"
+                  checked={showFieldOverlays}
+                  onChange={(e) => setShowFieldOverlays(e.target.checked)}
+                />
+                Show fields
+              </label>
               
               <div className="ctrl-view-toggle">
                 <button
@@ -168,6 +216,12 @@ function App() {
                   👁️ Preview
                 </button>
               </div>
+
+              <ExportPanel
+                fields={fields}
+                capabilityId={capabilityId}
+                compact
+              />
               
               <button
                 className="ctrl-reset"
@@ -195,11 +249,7 @@ function App() {
               <>
                 {/* Left sidebar */}
                 <aside className="sidebar">
-                  <section className="sidebar-section">
-                    <ImportPanel onImport={handleImport} />
-                  </section>
-                
-                  <section className="sidebar-section">
+                  <section className="sidebar-section sidebar-fields">
                     <h2 className="sidebar-heading">Fields ({fields.length})</h2>
                     <FieldList
                       fields={fields}
@@ -209,22 +259,6 @@ function App() {
                     />
                   </section>
 
-                  {selectedField && (
-                    <section className="sidebar-section">
-                      <FieldEditor
-                        field={selectedField}
-                        onChange={handleFieldChanged}
-                        onDelete={handleFieldDeleted}
-                      />
-                    </section>
-                  )}
-
-                  <section className="sidebar-section">
-                    <ExportPanel
-                      fields={fields}
-                      capabilityId={capabilityId}
-                    />
-                  </section>
                 </aside>
 
                 {/* PDF canvas area */}
@@ -234,6 +268,7 @@ function App() {
                     fields={fields}
                     selectedId={selectedId}
                     debugMode={debugMode}
+                    showFieldOverlays={showFieldOverlays}
                     defaultType={defaultType}
                     gridSize={gridSize}
                     enableOCR={enableOCR}
@@ -245,6 +280,19 @@ function App() {
                     onFieldSelected={setSelectedId}
                   />
                 </div>
+
+                {/* Right editor sidebar */}
+                <aside className="editor-sidebar">
+                  {selectedField ? (
+                    <FieldEditor
+                      field={selectedField}
+                      onChange={handleFieldChanged}
+                      onDelete={handleFieldDeleted}
+                    />
+                  ) : (
+                    <div className="editor-empty">Select a field to edit it.</div>
+                  )}
+                </aside>
               </>
             ) : (
               <>
