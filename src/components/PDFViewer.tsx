@@ -288,11 +288,23 @@ export const PDFViewer: React.FC<Props> = ({
     }
     if (requestId !== renderRequestRef.current) return;
 
-    // Hard workflow boundary: ACORD is schema/layout driven. Do not run native
-    // widget inference, embedded-text geometry, or OCR field inference here.
+    // Hard workflow boundary: ACORD uses the PDF's own AcroForm widgets as its
+    // authoritative layout. Scan every page; never substitute pixel geometry
+    // or OCR-generated rectangles.
     if (documentProfile.kind === 'acord') {
       setOcrWords([]);
       setOcrStatus(acordLayoutStatus(documentProfile));
+      let detectedCount = 0;
+      for (let index = 0; index < pdf.numPages; index++) {
+        if (requestId !== renderRequestRef.current) return;
+        const acordPage = index === pageNum - 1 ? page : await pdf.getPage(index + 1);
+        const acordViewport = acordPage.getViewport({ scale: SCALE });
+        const words = await extractEmbeddedPdfWords(acordPage, acordViewport);
+        const result = await autoDetectFormFields(acordPage, acordViewport, index, words);
+        detectedCount += result.count;
+      }
+      if (requestId !== renderRequestRef.current) return;
+      setOcrStatus(`Loaded ${detectedCount} authoritative ACORD PDF fields`);
       drawOverlay();
       return;
     }

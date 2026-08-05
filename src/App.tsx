@@ -6,7 +6,6 @@ import { FieldEditor } from './components/FieldEditor';
 import { FieldList } from './components/FieldList';
 import { ExportPanel } from './components/ExportPanel';
 import { PreviewPanel } from './components/PreviewPanel';
-import { ImportPanel } from './components/ImportPanel';
 import { Field, FieldType } from './types/Field';
 import { inferCapabilityId } from './utils/capability';
 import {
@@ -21,7 +20,6 @@ import {
   detectDocumentProfile,
   DocumentProfile,
 } from './utils/documentProfile';
-import { getAcordStarterFields } from './acord/layouts';
 import './App.css';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `${process.env.PUBLIC_URL}/pdf.worker.min.mjs`;
@@ -78,9 +76,6 @@ function App() {
           if (profile.kind === 'acord') {
             setEnableOCR(false);
             setCapabilityId(capabilityForAcord(profile));
-            setFields((previous) => previous.length > 0
-              ? previous
-              : getAcordStarterFields(profile));
           } else {
             setCapabilityId(inferCapabilityId(pdfFile.name, text));
           }
@@ -108,10 +103,7 @@ function App() {
     setCapabilityId(inferCapabilityId(file.name));
     const profile = detectDocumentProfile(file.name);
     setDocumentProfile(profile);
-    if (profile.kind === 'acord') {
-      setFields(getAcordStarterFields(profile));
-      setCapabilityId(capabilityForAcord(profile));
-    }
+    if (profile.kind === 'acord') setCapabilityId(capabilityForAcord(profile));
   }, []);
 
   const handleFieldAdded = useCallback((field: Field) => {
@@ -159,19 +151,18 @@ function App() {
     setSelectedId((prev) => prev?.startsWith('flat-') ? null : prev);
   }, [enableOCR]);
 
-  // Activating ACORD mode must hydrate the current document too. Keeping this
-  // separate from file loading makes it work after profile detection, Fast
-  // Refresh, and future programmatic profile changes.
+  // Remove the retired screenshot-derived ACORD starter after Fast Refresh.
+  // Authoritative AcroForm widgets use the auto- prefix and are retained.
   useEffect(() => {
     if (documentProfile.kind !== 'acord') return;
-    const starterFields = getAcordStarterFields(documentProfile);
-    if (starterFields.length === 0) return;
     setFields((previous) => {
-      const isPreviousStarter = previous.length > 0 && previous.every((field) =>
+      const hasRetiredStarter = previous.some((field) =>
         /^acord-125-v\d+-/.test(field.id));
-      return previous.length === 0 || isPreviousStarter ? starterFields : previous;
+      return hasRetiredStarter
+        ? previous.filter((field) => !/^acord-125-v\d+-/.test(field.id))
+        : previous;
     });
-  }, [documentProfile]);
+  }, [documentProfile.kind]);
 
   useEffect(() => {
     const handleDeleteKey = (event: KeyboardEvent) => {
@@ -249,20 +240,9 @@ function App() {
               </select>
               
               {documentProfile.kind === 'acord' ? (
-                <button
-                  type="button"
-                  className="ctrl-mode-badge"
-                  title="Reload the supported ACORD starter layout"
-                  onClick={() => {
-                    const starterFields = getAcordStarterFields(documentProfile);
-                    if (starterFields.length > 0) {
-                      setFields(starterFields);
-                      setSelectedId(starterFields[0].id);
-                    }
-                  }}
-                >
+                <span className="ctrl-mode-badge" title="ACORD fields are read from the PDF's authoritative widgets">
                   ACORD {documentProfile.formNumber || ''} layout mode
-                </button>
+                </span>
               ) : (
                 <label className="ctrl-check">
                   <input
@@ -369,14 +349,6 @@ function App() {
                       onSelect={setSelectedId}
                       onDelete={handleFieldDeleted}
                     />
-                    {documentProfile.kind === 'acord' && (
-                      <ImportPanel
-                        onImport={(importedFields) => {
-                          setFields(importedFields);
-                          setSelectedId(importedFields[0]?.id ?? null);
-                        }}
-                      />
-                    )}
                   </section>
 
                 </aside>
