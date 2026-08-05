@@ -326,18 +326,65 @@ export const PDFViewer: React.FC<Props> = ({
         setOcrStatus(acordLayoutStatus(documentProfile));
         onGeneratedFieldsReset();
         let detectedCount = 0;
+        const scannedPages: Array<{
+          page: pdfjsLib.PDFPageProxy;
+          viewport: pdfjsLib.PageViewport;
+          words: OCRWord[];
+          nativeRegions: NativeDetectionResult['regions'];
+        }> = [];
         for (let index = 0; index < pdf.numPages; index++) {
           if (requestId !== renderRequestRef.current) return;
+          setOcrStatus(`ACORD native fields: scanning page ${index + 1} of ${pdf.numPages}…`);
           const acordPage = index === pageNum - 1 ? page : await pdf.getPage(index + 1);
           const acordViewport = acordPage.getViewport({ scale: SCALE });
           const words = await extractEmbeddedPdfWords(acordPage, acordViewport);
           const result = await autoDetectFormFields(acordPage, acordViewport, index, words, true);
           detectedCount += result.count;
+          scannedPages.push({
+            page: acordPage,
+            viewport: acordViewport,
+            words,
+            nativeRegions: result.regions,
+          });
+        }
+
+        // Older ACORD PDFs have incomplete AcroForms. A second pass examines
+        // ruled regions only after excluding every native widget rectangle.
+        let supplementalCount = 0;
+        for (let index = 0; index < scannedPages.length; index++) {
+          if (requestId !== renderRequestRef.current) return;
+          setOcrStatus(
+            `ACORD gap coverage: scanning page ${index + 1} of ${scannedPages.length} ` +
+            `(${detectedCount} native, ${supplementalCount} supplemental)…`
+          );
+          const scanned = scannedPages[index];
+          const analysisCanvas = document.createElement('canvas');
+          analysisCanvas.width = scanned.viewport.width;
+          analysisCanvas.height = scanned.viewport.height;
+          const analysisContext = analysisCanvas.getContext('2d');
+          if (!analysisContext) continue;
+          await scanned.page.render({
+            canvas: analysisCanvas,
+            canvasContext: analysisContext,
+            viewport: scanned.viewport,
+          }).promise;
+          supplementalCount += autoDetectFlatFields(
+            analysisCanvas,
+            scanned.viewport,
+            index,
+            scanned.words,
+            scanned.nativeRegions,
+            'acord-gap'
+          );
         }
         if (requestId !== renderRequestRef.current) return;
-        acordScanRef.current = { fileKey, count: detectedCount };
+        acordScanRef.current = { fileKey, count: detectedCount + supplementalCount };
+        setOcrStatus(
+          `Loaded ${detectedCount} native + ${supplementalCount} supplemental ACORD fields`
+        );
+      } else {
+        setOcrStatus(`Loaded ${acordScanRef.current.count} ACORD field regions`);
       }
-      setOcrStatus(`Loaded ${acordScanRef.current?.count || 0} authoritative ACORD PDF fields`);
       drawOverlay();
       return;
     }
@@ -398,7 +445,8 @@ export const PDFViewer: React.FC<Props> = ({
     viewport: pdfjsLib.PageViewport,
     pageIndex: number,
     words: OCRWord[],
-    nativeRegions: NativeDetectionResult['regions'] = []
+    nativeRegions: NativeDetectionResult['regions'] = [],
+    idPrefix = 'flat'
   ): number => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return 0;
@@ -413,7 +461,7 @@ export const PDFViewer: React.FC<Props> = ({
       if (fields.some(f => f.page === pageIndex && Math.abs(f.x - pdfX) < 4 && Math.abs(f.y - pdfY) < 4)) return;
       const name = region.label || `detected_page${pageIndex + 1}_${index + 1}`;
       onFieldAdded({
-        id: `flat-${pageIndex}-${Math.round(pdfX)}-${Math.round(pdfY)}`,
+        id: `${idPrefix}-${pageIndex}-${Math.round(pdfX)}-${Math.round(pdfY)}`,
         name, sourceFieldId: name, semanticKey: toSemanticKeyFromFieldId(name),
         displayLabel: toDisplayLabelFromFieldId(name), page: pageIndex,
         x: pdfX, y: pdfY, width, height,

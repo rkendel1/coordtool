@@ -144,8 +144,10 @@ function App() {
 
   const handleGeneratedFieldsReset = useCallback(() => {
     setFields((previous) => previous.filter((field) =>
-      !field.id.startsWith('auto-') && !/^acord-125-v\d+-/.test(field.id)));
-    setSelectedId((previous) => previous?.startsWith('auto-') ? null : previous);
+      !field.id.startsWith('auto-') && !field.id.startsWith('acord-gap-') &&
+      !/^acord-125-v\d+-/.test(field.id)));
+    setSelectedId((previous) =>
+      previous?.startsWith('auto-') || previous?.startsWith('acord-gap-') ? null : previous);
   }, []);
 
   // Flattened-page detections are provisional output from the opt-in OCR
