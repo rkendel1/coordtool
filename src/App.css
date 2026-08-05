@@ -83,6 +83,12 @@
   color: #ffd47d;
   font-size: 0.85rem;
   white-space: nowrap;
+  cursor: pointer;
+}
+
+.ctrl-mode-badge:hover {
+  background: #514323;
+  border-color: #e2ad40;
 }
 
 .ctrl-reset {

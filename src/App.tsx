@@ -166,7 +166,11 @@ function App() {
     if (documentProfile.kind !== 'acord') return;
     const starterFields = getAcordStarterFields(documentProfile);
     if (starterFields.length === 0) return;
-    setFields((previous) => previous.length > 0 ? previous : starterFields);
+    setFields((previous) => {
+      const isPreviousStarter = previous.length > 0 && previous.every((field) =>
+        /^acord-125-v\d+-/.test(field.id));
+      return previous.length === 0 || isPreviousStarter ? starterFields : previous;
+    });
   }, [documentProfile]);
 
   useEffect(() => {
@@ -245,9 +249,20 @@ function App() {
               </select>
               
               {documentProfile.kind === 'acord' ? (
-                <span className="ctrl-mode-badge" title="ACORD forms use curated layouts instead of generic OCR detection">
+                <button
+                  type="button"
+                  className="ctrl-mode-badge"
+                  title="Reload the supported ACORD starter layout"
+                  onClick={() => {
+                    const starterFields = getAcordStarterFields(documentProfile);
+                    if (starterFields.length > 0) {
+                      setFields(starterFields);
+                      setSelectedId(starterFields[0].id);
+                    }
+                  }}
+                >
                   ACORD {documentProfile.formNumber || ''} layout mode
-                </span>
+                </button>
               ) : (
                 <label className="ctrl-check">
                   <input

@@ -15,7 +15,7 @@ interface StarterField {
 // high-confidence fields in the first-page header. Expand this versioned list
 // section by section as each area is validated against the source edition.
 const PAGE_ONE_STARTER: StarterField[] = [
-  { name: 'date', semanticKey: 'application.date', displayLabel: 'Date', x: 507, y: 744, width: 87, height: 24, type: 'date' },
+  { name: 'date', semanticKey: 'application.date', displayLabel: 'Date', x: 507, y: 744, width: 87, height: 10, type: 'date' },
   { name: 'agencyName', semanticKey: 'agency.name', displayLabel: 'Agency Name', x: 58, y: 728, width: 180 },
   { name: 'agencyAddress', semanticKey: 'agency.address.street', displayLabel: 'Agency Address', x: 50, y: 712, width: 188 },
   { name: 'agencyCity', semanticKey: 'agency.address.city', displayLabel: 'Agency City', x: 40, y: 696, width: 198 },
@@ -32,12 +32,12 @@ const PAGE_ONE_STARTER: StarterField[] = [
   { name: 'agencyEmail', semanticKey: 'agency.email', displayLabel: 'Agency Email', x: 52, y: 637, width: 186 },
   { name: 'agencyCode', semanticKey: 'agency.code', displayLabel: 'Agency Code', x: 48, y: 623, width: 82 },
   { name: 'agencySubcode', semanticKey: 'agency.subcode', displayLabel: 'Agency Subcode', x: 158, y: 623, width: 80 },
-  { name: 'agencyCustomerId', semanticKey: 'agency.customerId', displayLabel: 'Agency Customer ID', x: 82, y: 608, width: 156 },
+  { name: 'agencyCustomerId', semanticKey: 'agency.customerId', displayLabel: 'Agency Customer ID', x: 82, y: 618, width: 156 },
 ];
 
 export function createAcord125StarterFields(): Field[] {
   return PAGE_ONE_STARTER.map((entry) => ({
-    id: `acord-125-v1-${entry.name}`,
+    id: `acord-125-v2-${entry.name}`,
     name: entry.name,
     sourceFieldId: entry.name,
     semanticKey: entry.semanticKey,
@@ -46,9 +46,9 @@ export function createAcord125StarterFields(): Field[] {
     x: entry.x,
     y: entry.y,
     width: entry.width,
-    height: entry.height ?? 12,
+    height: entry.height ?? 9,
     type: entry.type ?? 'text',
-    fontSize: 9,
+    fontSize: 7,
     maxWidth: entry.width,
   }));
 }

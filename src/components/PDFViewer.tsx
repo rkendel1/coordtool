@@ -489,16 +489,17 @@ export const PDFViewer: React.FC<Props> = ({
       ctx.lineWidth = hasOverflow ? 2.5 : (f.id === selectedId ? 2.5 : 1.5);
       ctx.strokeRect(canvasX, canvasY, canvasW, canvasH);
 
-      // Label
+      // Field names overwhelm dense forms such as ACORD when painted into
+      // every short row. Keep the normal overlay structural; the sidebar and
+      // editor carry labels, while debug mode can opt into canvas details.
       ctx.save();
       ctx.beginPath();
       ctx.rect(canvasX, canvasY, canvasW, canvasH);
       ctx.clip();
-      ctx.fillStyle = hasOverflow ? '#ff0000' : '#1a1a2e';
-      ctx.font = hasOverflow ? 'bold 10px monospace' : '10px monospace';
-      ctx.fillText(f.displayLabel || f.name || '(unnamed)', canvasX + 3, canvasY + 13);
-
       if (debugMode) {
+        ctx.fillStyle = hasOverflow ? '#ff0000' : '#1a1a2e';
+        ctx.font = hasOverflow ? 'bold 10px monospace' : '10px monospace';
+        ctx.fillText(f.displayLabel || f.name || '(unnamed)', canvasX + 3, canvasY + 11);
         ctx.fillStyle = '#555';
         ctx.font = '9px monospace';
         ctx.fillText(
