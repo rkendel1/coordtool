@@ -44,13 +44,32 @@ export type PhoneFormat = '(xxx) xxx-xxxx' | 'xxx-xxx-xxxx' | 'xxxxxxxxxx';
 export type PresentationSpacingStrategy = 'semantic' | 'template' | 'compact';
 export type PresentationOverflowStrategy = 'reflow' | 'shrink' | 'clip' | 'expand-region';
 export type BoxInputMode = 'digits' | 'alphanumeric' | 'raw';
+export type FieldCardinality = 'single' | 'multiple' | 'collection';
+export type SemanticDataType =
+  | 'text'
+  | 'boolean'
+  | 'date'
+  | 'datetime'
+  | 'email'
+  | 'phone'
+  | 'currency'
+  | 'address'
+  | 'ssn'
+  | 'identifier'
+  | 'enum'
+  | 'number';
 
 export interface Field {
   id: string;
   name: string;
   sourceFieldId: string;
   semanticKey: string;
+  semanticKeyOverride?: boolean;
+  /** Printed section/role text used during normalization; never exported. */
+  semanticContext?: string;
   displayLabel: string;
+  description?: string;
+  dataType?: SemanticDataType;
   page: number;
   x: number;
   y: number;
@@ -65,6 +84,7 @@ export interface Field {
   overflowStrategy?: 'truncate' | 'shrink' | 'continue'; // Phase 2, Item 3
   checkboxStyle?: 'X' | 'checkmark' | 'filled'; // Phase 2, Item 6
   required?: boolean;
+  cardinality?: FieldCardinality;
   transformType?: 'none' | 'date' | 'currency' | 'percentage' | 'phone' | 'height' | 'weight' | 'state';
   transformFormat?: string;
   dateFormat?: DateFormat;
@@ -109,29 +129,18 @@ export interface LayoutEntry {
   checkboxStyle?: 'X' | 'checkmark' | 'filled'; // Phase 2, Item 6
 }
 
-export interface MappingTransform {
-  type: string;
-  format?: string;
-}
-
 export interface MappingDefinition {
   id: string;
-  semantic: {
-    key: string;
-    label: string;
-    type: string;
+  semanticKey: string;
+  binding: {
+    fieldId: string;
+    sourceId: string;
   };
-  target: {
-    field: string;
-    layoutReference: string;
-  };
-  transform: MappingTransform[];
 }
 
 export interface MappingArtifact {
-  schemaVersion: '1.0';
   artifactType: 'field-mapping';
-  capability: string;
+  version: '1.0';
   mappings: MappingDefinition[];
 }
 

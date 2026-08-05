@@ -9,15 +9,12 @@ import { MappingArtifact, TransformEntry } from '../types/Field';
 describe('resolveValue', () => {
   it('resolves simple data path', () => {
     const mapping: MappingArtifact = {
-      schemaVersion: '1.0',
       artifactType: 'field-mapping',
-      capability: 'carrier.form.001',
+      version: '1.0',
       mappings: [
         {
-          id: 'mapping-applicant-name',
-          semantic: { key: 'applicant.name', label: 'Applicant Name', type: 'text' },
-          target: { field: 'applicantName', layoutReference: 'applicantName' },
-          transform: [],
+          id: 'mapping_001', semanticKey: 'applicant.name',
+          binding: { fieldId: 'field_001', sourceId: 'applicantName' },
         },
       ],
     };
@@ -25,20 +22,17 @@ describe('resolveValue', () => {
       applicant: { name: 'John Doe' },
     };
     
-    expect(resolveValue(mapping, data, 'applicantName')).toBe('John Doe');
+    expect(resolveValue(mapping, data, 'field_001')).toBe('John Doe');
   });
 
   it('resolves nested data path', () => {
     const mapping: MappingArtifact = {
-      schemaVersion: '1.0',
       artifactType: 'field-mapping',
-      capability: 'carrier.form.001',
+      version: '1.0',
       mappings: [
         {
-          id: 'mapping-policy-address-city',
-          semantic: { key: 'policy.address.city', label: 'City', type: 'text' },
-          target: { field: 'city', layoutReference: 'city' },
-          transform: [],
+          id: 'mapping_001', semanticKey: 'policy.address.city',
+          binding: { fieldId: 'field_001', sourceId: 'city' },
         },
       ],
     };
@@ -46,14 +40,13 @@ describe('resolveValue', () => {
       policy: { address: { city: 'New York' } },
     };
     
-    expect(resolveValue(mapping, data, 'city')).toBe('New York');
+    expect(resolveValue(mapping, data, 'field_001')).toBe('New York');
   });
 
   it('returns undefined for missing mapping', () => {
     const mapping: MappingArtifact = {
-      schemaVersion: '1.0',
       artifactType: 'field-mapping',
-      capability: 'carrier.form.001',
+      version: '1.0',
       mappings: [],
     };
     const data = {};
@@ -63,15 +56,12 @@ describe('resolveValue', () => {
 
   it('handles semantic keys with nested paths', () => {
     const mapping: MappingArtifact = {
-      schemaVersion: '1.0',
       artifactType: 'field-mapping',
-      capability: 'carrier.form.001',
+      version: '1.0',
       mappings: [
         {
-          id: 'mapping-applicant-name',
-          semantic: { key: 'applicant.name', label: 'Applicant Name', type: 'text' },
-          target: { field: 'applicantName', layoutReference: 'applicantName' },
-          transform: [],
+          id: 'mapping_001', semanticKey: 'applicant.name',
+          binding: { fieldId: 'field_001', sourceId: 'applicantName' },
         },
       ],
     };
@@ -79,27 +69,18 @@ describe('resolveValue', () => {
       applicant: { name: 'Jane Smith' },
     };
     
-    expect(resolveValue(mapping, data, 'applicantName')).toBe('Jane Smith');
+    expect(resolveValue(mapping, data, 'field_001')).toBe('Jane Smith');
   });
 
   it('resolves value from mapping artifact semantic key', () => {
     const mapping: MappingArtifact = {
-      schemaVersion: '1.0',
       artifactType: 'field-mapping',
-      capability: 'acord.form.125',
+      version: '1.0',
       mappings: [
         {
-          id: 'mapping-agent-name',
-          semantic: {
-            key: 'party.agent.name',
-            label: 'Agent Name',
-            type: 'text',
-          },
-          target: {
-            field: 'agentsname',
-            layoutReference: 'agentsname',
-          },
-          transform: [],
+          id: 'mapping_001',
+          semanticKey: 'party.agent.name',
+          binding: { fieldId: 'field_001', sourceId: 'agentsname' },
         },
       ],
     };
@@ -112,7 +93,7 @@ describe('resolveValue', () => {
       },
     };
 
-    expect(resolveValue(mapping, data, 'agentsname')).toBe('Morgan Agent');
+    expect(resolveValue(mapping, data, 'field_001')).toBe('Morgan Agent');
   });
 });
 

@@ -112,6 +112,34 @@
   background: #2e70c0;
 }
 
+.ep-individual {
+  margin-top: 14px;
+}
+
+.ep-subtitle {
+  margin: 0 0 7px;
+  color: #4a5568;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ep-file-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.ep-btn-file {
+  min-width: 0;
+  padding: 7px 8px;
+  overflow: hidden;
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .header-export {
   position: relative;
   color: #fff;

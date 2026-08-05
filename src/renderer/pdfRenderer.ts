@@ -7,7 +7,6 @@ import { PDFDocument, PDFPage, rgb } from 'pdf-lib';
 import {
   LayoutEntry,
   MappingArtifact,
-  MappingTransform,
   TransformEntry,
   TableDefinition,
 } from '../types/Field';
@@ -43,12 +42,14 @@ function toSemanticTransformKey(fieldName: string): string {
 export function resolveValue(
   mapping: MappingArtifact,
   data: Record<string, any>,
-  fieldName: string
+  layoutField: string
 ): any {
-  const mappingEntry = mapping.mappings.find((entry) => entry.target.field === fieldName);
+  const mappingEntry = mapping.mappings.find(
+    entry => entry.binding.fieldId === layoutField
+  );
   if (!mappingEntry) return undefined;
 
-  const dataPath = mappingEntry.semantic.key;
+  const dataPath = mappingEntry.semanticKey;
   
   // Navigate nested data structure
   const parts = dataPath.split('.');
@@ -56,12 +57,12 @@ export function resolveValue(
   
   for (const part of parts) {
     if (value === null || value === undefined) {
-      return data[mappingEntry.target.field];
+      return data[layoutField];
     }
     value = value[part];
   }
   
-  return value ?? data[mappingEntry.target.field];
+  return value ?? data[layoutField];
 }
 
 /**
@@ -73,20 +74,12 @@ export function applyTransforms(
   transforms: Record<string, TransformEntry>,
   mapping?: MappingArtifact
 ): string {
-  if (mapping) {
-    const mappingEntry = mapping.mappings.find((entry) => entry.target.field === fieldName);
-    const mappingTransforms: MappingTransform[] = mappingEntry?.transform ?? [];
-    if (mappingTransforms.length > 0) {
-      return mappingTransforms.reduce((currentValue, transformRule) => {
-        return applyFormatter(currentValue, transformRule.type, transformRule.format);
-      }, value);
-    }
-  }
-
   const candidateKeys = [fieldName, toSemanticTransformKey(fieldName)];
-  const mappingEntry = mapping?.mappings.find((entry) => entry.target.field === fieldName);
-  if (mappingEntry?.semantic?.key) {
-    candidateKeys.push(mappingEntry.semantic.key);
+  const mappingEntry = mapping?.mappings.find(
+    entry => entry.binding.fieldId === fieldName
+  );
+  if (mappingEntry?.semanticKey) {
+    candidateKeys.push(mappingEntry.semanticKey);
   }
 
   const transform = candidateKeys
@@ -342,12 +335,15 @@ export async function renderPdf(options: RenderOptions): Promise<Uint8Array> {
   const pages = pdfDoc.getPages();
   
   // Render regular fields
-  for (const [fieldName, field] of Object.entries(layout)) {
+  const layoutEntries = Object.entries(layout);
+  for (let index = 0; index < layoutEntries.length; index++) {
+    const [fieldName, field] = layoutEntries[index];
+    const layoutField = `field_${String(index + 1).padStart(3, '0')}`;
     // Resolve value from data
-    const rawValue = resolveValue(mapping, data, fieldName);
+    const rawValue = resolveValue(mapping, data, layoutField);
     
     // Apply transforms
-    const formattedValue = applyTransforms(fieldName, rawValue, transforms, mapping);
+    const formattedValue = applyTransforms(layoutField, rawValue, transforms, mapping);
     
     // Get page and offset
     const page = pages[field.page];

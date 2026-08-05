@@ -1,5 +1,6 @@
 import React from 'react';
-import { Field, FieldType } from '../types/Field';
+import { Field, FieldType, SemanticDataType } from '../types/Field';
+import { requiresSemanticCorrection, suggestSemanticKey } from '../utils/fieldNames';
 import { getOverflowWarning } from '../utils/validation';
 import './FieldEditor.css';
 
@@ -17,6 +18,11 @@ const FIELD_TYPES: FieldType[] = [
   'signature',
   'initials',
   'table',
+];
+
+const DATA_TYPES: SemanticDataType[] = [
+  'text', 'boolean', 'date', 'datetime', 'email', 'phone', 'currency',
+  'address', 'ssn', 'identifier', 'enum', 'number',
 ];
 
 const DATE_FORMATS = [
@@ -186,8 +192,29 @@ export const FieldEditor: React.FC<Props> = ({ field, onChange, onDelete }) => {
         type="text"
         placeholder="e.g. applicant.mailingAddress"
         value={field.semanticKey}
-        onChange={(e) => update({ semanticKey: e.target.value })}
+        onChange={(e) => update({ semanticKey: e.target.value, semanticKeyOverride: true })}
       />
+      {requiresSemanticCorrection(field) && (
+        <div className="fe-warning">
+          <strong>⚠️ Change this semantic key:</strong>
+          <span className="fe-warning-change">
+            <code>{field.semanticKey}</code>
+            <span aria-hidden="true">→</span>
+            <code>{suggestSemanticKey(field)}</code>
+          </span>
+          <span>Use the business concept shown by the printed form label; do not include form, page, or control names.</span>
+          <button
+            type="button"
+            className="fe-warning-apply"
+            onClick={() => update({
+              semanticKey: suggestSemanticKey(field),
+              semanticKeyOverride: false,
+            })}
+          >
+            Auto-apply suggestion
+          </button>
+        </div>
+      )}
 
       <label className="fe-label">Display Label</label>
       <input
@@ -196,6 +223,15 @@ export const FieldEditor: React.FC<Props> = ({ field, onChange, onDelete }) => {
         placeholder="e.g. Mailing Address"
         value={field.displayLabel}
         onChange={(e) => update({ displayLabel: e.target.value })}
+      />
+
+      <label className="fe-label">Description</label>
+      <input
+        className="fe-input"
+        type="text"
+        placeholder="e.g. Applicant mailing address"
+        value={field.description ?? ''}
+        onChange={(e) => update({ description: e.target.value })}
       />
 
       <label className="fe-label">Type</label>
@@ -212,6 +248,20 @@ export const FieldEditor: React.FC<Props> = ({ field, onChange, onDelete }) => {
             {t}
           </option>
         ))}
+      </select>
+
+      <label className="fe-label">Semantic Data Type</label>
+      <select
+        className="fe-select"
+        value={field.dataType ?? ''}
+        onChange={(e) => update({
+          dataType: e.target.value
+            ? e.target.value as SemanticDataType
+            : undefined,
+        })}
+      >
+        <option value="">Infer from field</option>
+        {DATA_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
       </select>
 
       {field.type === 'table' && (
@@ -262,6 +312,19 @@ export const FieldEditor: React.FC<Props> = ({ field, onChange, onDelete }) => {
           Multiline
         </label>
       )}
+
+      <label className="fe-label">Cardinality</label>
+      <select
+        className="fe-select"
+        value={field.cardinality ?? 'single'}
+        onChange={(e) => update({
+          cardinality: e.target.value as NonNullable<Field['cardinality']>,
+        })}
+      >
+        <option value="single">Single</option>
+        <option value="multiple">Multiple</option>
+        <option value="collection">Collection</option>
+      </select>
 
       <label className="fe-check-label">
         <input

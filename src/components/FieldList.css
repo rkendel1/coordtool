@@ -66,6 +66,12 @@
   color: #888;
 }
 
+.fl-warning {
+  color: #d27a00;
+  font-size: 0.8rem;
+  line-height: 1;
+}
+
 .fl-del {
   background: none;
   border: none;

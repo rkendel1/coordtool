@@ -69,6 +69,42 @@ interface NativeDetectionResult {
   regions: Array<{ x: number; y: number; width: number; height: number }>;
 }
 
+function semanticContextForRect(
+  rect: number[],
+  viewport: pdfjsLib.PageViewport,
+  words: OCRWord[]
+): string {
+  const viewportRect = viewport.convertToViewportRectangle(rect);
+  const fieldTop = Math.min(viewportRect[1], viewportRect[3]);
+  const candidates = words
+    .filter(word => word.y < fieldTop && fieldTop - word.y < 260)
+    .sort((a, b) => b.y - a.y);
+  const heading = candidates.find(word =>
+    /(?:part|section)\s+[^\n]*(?:applicant|qualifying\s+individual)|(?:applicant|qualifying\s+individual)\s+information/i.test(word.text)
+  );
+  return heading?.text || '';
+}
+
+// PDF.js annotation payloads vary by PDF and version. Some expose the PDF
+// subtype string, while others expose only AnnotationType.WIDGET (20).
+function isNativeWidget(annotation: any): boolean {
+  const isWidget = annotation?.subtype === 'Widget' || annotation?.annotationType === 20;
+  return isWidget && !annotation.hidden && !annotation.readOnly && !annotation.pushButton;
+}
+
+function annotationDisplayLabel(annotation: any, sourceFieldId: string): string {
+  const accessibilityLabel = typeof annotation?.alternativeText === 'string'
+    ? annotation.alternativeText.trim()
+    : '';
+  if (accessibilityLabel) {
+    return accessibilityLabel
+      .replace(/^\s*\d+[A-Z]?[.)]\s*/i, '')
+      .split(/\.\s+(?=(?:enter|select|check|provide|choose|indicate)\b)/i)[0]
+      .trim();
+  }
+  return toDisplayLabelFromFieldId(sourceFieldId) || sourceFieldId;
+}
+
 async function extractEmbeddedPdfWords(
   page: pdfjsLib.PDFPageProxy,
   viewport: pdfjsLib.PageViewport
@@ -215,19 +251,23 @@ export const PDFViewer: React.FC<Props> = ({
     await page.render({ canvas, canvasContext: ctx, viewport }).promise;
     
     // Auto-detect native widgets first, then printed/flattened form cells.
+    const embeddedWords = (enableAutoDetect || enableOCR)
+      ? await extractEmbeddedPdfWords(page, viewport)
+      : [];
     const nativeDetection = (enableAutoDetect || enableOCR)
-      ? await autoDetectFormFields(page, viewport, pageNum - 1)
+      ? await autoDetectFormFields(page, viewport, pageNum - 1, embeddedWords)
       : { count: 0, regions: [] };
     if ((enableAutoDetect || enableOCR) && nativeDetection.count > 0) {
       setOcrStatus(`Found ${nativeDetection.count} native PDF fields`);
     }
     
-    // Every auto-detect run is hybrid. Digital PDFs use their fast, precise
-    // text layer; WASM OCR is a fallback only for image-only pages.
-    if ((enableOCR || enableAutoDetect) && canvas) {
+    // Native AcroForm widgets are authoritative. Flattened-page geometry is a
+    // separate, opt-in fallback because ruled forms contain many decorative
+    // cells that look like inputs. Never run it from Auto-detect alone.
+    if (enableOCR && canvas && nativeDetection.count === 0) {
       try {
         setOcrStatus('Analyzing embedded PDF geometry…');
-        let words = await extractEmbeddedPdfWords(page, viewport);
+        let words = embeddedWords;
         let source = 'PDF geometry';
         if (words.length < 10) {
           setOcrStatus('Image-only page — analyzing with WASM OCR…');
@@ -238,9 +278,7 @@ export const PDFViewer: React.FC<Props> = ({
         const detected = autoDetectFlatFields(
           canvas, viewport, pageNum - 1, words, nativeDetection.regions
         );
-        setOcrStatus(nativeDetection.count > 0
-          ? `Kept ${nativeDetection.count} native fields; added ${detected} from ${source}`
-          : `Added ${detected} fields from ${source}`);
+        setOcrStatus(`Added ${detected} fields from ${source}`);
         if (onOCRProgress) onOCRProgress(100);
       } catch (err) {
         console.error('OCR failed:', err);
@@ -250,6 +288,8 @@ export const PDFViewer: React.FC<Props> = ({
     } else if (nativeDetection.count === 0) {
       setOcrWords([]);
       setOcrStatus('');
+    } else {
+      setOcrWords([]);
     }
     
     drawOverlay();
@@ -299,13 +339,12 @@ export const PDFViewer: React.FC<Props> = ({
   const autoDetectFormFields = async (
     page: pdfjsLib.PDFPageProxy,
     viewport: pdfjsLib.PageViewport,
-    pageIndex: number
+    pageIndex: number,
+    words: OCRWord[] = []
   ): Promise<NativeDetectionResult> => {
     try {
       const annotations = await page.getAnnotations();
-      const formFields = annotations.filter((ann: any) => 
-        ann.subtype === 'Widget' && ann.fieldType
-      );
+      const formFields = annotations.filter(isNativeWidget);
       const nativeRegions = formFields.map((ann: any) => {
         const [x1, y1, x2, y2] = ann.rect;
         return {
@@ -336,14 +375,20 @@ export const PDFViewer: React.FC<Props> = ({
           fieldType = 'checkbox';
         }
         
-        const fieldName = labelToFieldName(ann.fieldName || ann.alternativeText || '');
+        // sourceFieldId must remain exactly equal to the PDF's field name so
+        // exported mappings can fill the original widget later.
+        const sourceFieldId = typeof ann.fieldName === 'string' && ann.fieldName.trim()
+          ? ann.fieldName.trim()
+          : `pdf_field_${ann.id || pageIndex + 1}`;
+        const displayLabel = annotationDisplayLabel(ann, sourceFieldId);
         
         const newField: Field = {
           id: `auto-${Date.now()}-${Math.random()}`,
-          name: fieldName,
-          sourceFieldId: fieldName,
-          semanticKey: toSemanticKeyFromFieldId(fieldName),
-          displayLabel: toDisplayLabelFromFieldId(fieldName),
+          name: sourceFieldId,
+          sourceFieldId,
+          semanticKey: toSemanticKeyFromFieldId(displayLabel),
+          semanticContext: semanticContextForRect(ann.rect, viewport, words),
+          displayLabel,
           page: pageIndex,
           x: x1,
           y: y1,
@@ -398,7 +443,7 @@ export const PDFViewer: React.FC<Props> = ({
       ctx.clip();
       ctx.fillStyle = hasOverflow ? '#ff0000' : '#1a1a2e';
       ctx.font = hasOverflow ? 'bold 10px monospace' : '10px monospace';
-      ctx.fillText(f.name || '(unnamed)', canvasX + 3, canvasY + 13);
+      ctx.fillText(f.displayLabel || f.name || '(unnamed)', canvasX + 3, canvasY + 13);
 
       if (debugMode) {
         ctx.fillStyle = '#555';
@@ -591,7 +636,7 @@ export const PDFViewer: React.FC<Props> = ({
           🔲 Snap-to-grid active ({gridSize}px grid)
         </div>
       )}
-      {(enableOCR || enableAutoDetect) && ocrWords.length > 0 && (
+      {enableOCR && ocrWords.length > 0 && (
         <div className="pdf-hint">
           📝 OCR detected {ocrWords.length} words (proximity labeling enabled)
         </div>

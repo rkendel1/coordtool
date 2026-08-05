@@ -3,45 +3,82 @@ import {
   LayoutEntry,
   MappingArtifact,
   MappingDefinition,
+  SemanticDataType,
   TransformEntry,
   TableDefinition,
 } from '../types/Field';
+import {
+  canonicalDisplayLabel,
+  descriptionFromSemanticKey,
+  requiresSemanticCorrection,
+} from './fieldNames';
+
+const isCanonicalField = (field: Field) =>
+  field.sourceFieldId.trim() !== '' &&
+  field.semanticKey.trim() !== '' &&
+  field.displayLabel.trim() !== '' &&
+  !requiresSemanticCorrection(field);
+
+function assertSemanticQuality(fields: Field[]): void {
+  const leaked = fields.filter(requiresSemanticCorrection);
+  if (leaked.length) {
+    throw new Error(
+      `Export blocked: ${leaked.length} field(s) still have non-canonical semantic keys.`
+    );
+  }
+}
 
 interface CapabilityManifest {
   kind: 'capability';
-  schemaVersion: '1.0';
+  manifestVersion: '1.0';
+  version: '1.0.0';
   id: string;
-  name: string;
-  domain: string;
   type: string;
   artifacts: {
     template: string;
+    schema: string;
+    questions: string;
     layout: string;
     mapping: string;
     transforms: string;
-    fields: string;
-    questions: string;
     validation: string;
   };
   capabilities: string[];
 }
 
 interface ValidationSchema {
-  schemaVersion: '1.0';
+  artifactType: 'validation';
+  version: '1.0';
   rules: Array<{
     field: string;
-    required: boolean;
+    rule: 'required';
   }>;
 }
 
+interface DocumentLayoutField {
+  sourceId: string;
+  page: number;
+  geometry: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  render: {
+    type: Field['type'];
+    fontSize: number;
+  };
+}
+
 interface LayoutArtifact {
-  schemaVersion: '1.0';
-  layout: Record<string, LayoutEntry>;
+  artifactType: 'document-layout';
+  version: '1.0';
+  pages: number;
+  fields: Record<string, DocumentLayoutField>;
 }
 
 interface TransformsArtifact {
-  schemaVersion: '1.0';
-  transforms: Record<string, TransformEntry>;
+  formats: Partial<Record<'phone' | 'date' | 'currency', string>>;
 }
 
 interface FieldsArtifact {
@@ -64,25 +101,24 @@ interface FieldsArtifact {
 }
 
 interface QuestionExportSchema {
-  schemaVersion: '1.0';
-  capability: string;
+  artifactType: 'document-questions';
+  version: '1.0';
   questions: QuestionSchema[];
 }
 
 interface QuestionSchema {
   id: string;
-  field: {
-    semanticKey: string;
-    target: string;
-  };
+  semanticKey: string;
   prompt: {
-    question: string;
+    label: string;
     helpText: string;
   };
-  type: {
-    input: string;
+  input: {
+    type: string;
   };
-  validation: string[];
+  required: boolean;
+  order: number;
+  group: string;
 }
 
 interface GenerateQuestionsOptions {
@@ -93,25 +129,20 @@ interface GenerateQuestionsOptions {
 
 interface GenerateManifestOptions {
   capability?: string;
-  name?: string;
 }
 
 interface GenerateMappingOptions {
   capability?: string;
 }
 
+interface GenerateDocumentSchemaOptions {
+  capability?: string;
+  generatedAt?: string;
+}
+
 function normalizeCapability(capability?: string): string {
   if (!capability || !capability.trim()) return 'capability.unknown';
   return capability.trim().toLowerCase();
-}
-
-function capabilityToDisplayName(capability: string): string {
-  const words = capability
-    .split('.')
-    .filter(Boolean)
-    .map((word) => word.toUpperCase());
-  if (words.length === 0) return 'Capability Completion';
-  return `${words.join(' ')} Completion`;
 }
 
 /** Generate the unified layout schema (single source of truth). */
@@ -147,9 +178,35 @@ export function generateLayout(fields: Field[]): Record<string, LayoutEntry> {
 }
 
 export function generateLayoutArtifact(fields: Field[]): LayoutArtifact {
+  assertSemanticQuality(fields);
+  const renderableFields = fields.filter(field =>
+    isCanonicalField(field)
+  );
+  const artifactFields = Object.fromEntries(renderableFields.map((field, index) => [
+    `field_${String(index + 1).padStart(3, '0')}`,
+    {
+      sourceId: field.sourceFieldId,
+      page: field.page,
+      geometry: {
+        x: Math.round(field.x),
+        y: Math.round(field.y),
+        width: Math.round(field.width),
+        height: Math.round(field.height),
+      },
+      render: {
+        type: field.type,
+        fontSize: field.fontSize ?? 10,
+      },
+    },
+  ]));
+
   return {
-    schemaVersion: '1.0',
-    layout: generateLayout(fields),
+    artifactType: 'document-layout',
+    version: '1.0',
+    pages: renderableFields.length
+      ? Math.max(...renderableFields.map(field => field.page)) + 1
+      : 0,
+    fields: artifactFields,
   };
 }
 
@@ -158,34 +215,21 @@ export function generateMapping(
   fields: Field[],
   options: GenerateMappingOptions = {}
 ): MappingArtifact {
-  const capability = normalizeCapability(options.capability);
-  const mappings: MappingDefinition[] = fields
-    .filter(
-      (field) =>
-        field.sourceFieldId.trim() !== '' &&
-        field.semanticKey.trim() !== '' &&
-        field.displayLabel.trim() !== ''
-    )
-    .map((field) => {
-      return {
-        id: toMappingId(field.semanticKey),
-        semantic: {
-          key: field.semanticKey,
-          label: field.displayLabel,
-          type: inferSemanticType(field),
-        },
-        target: {
-          field: field.sourceFieldId,
-          layoutReference: field.sourceFieldId,
-        },
-        transform: mappingTransformsForField(field),
-      };
-    });
+  void options;
+  assertSemanticQuality(fields);
+  const mappableFields = fields.filter(isCanonicalField);
+  const mappings: MappingDefinition[] = mappableFields.map((field, index) => ({
+    id: `mapping_${String(index + 1).padStart(3, '0')}`,
+    semanticKey: field.semanticKey,
+    binding: {
+      fieldId: `field_${String(index + 1).padStart(3, '0')}`,
+      sourceId: field.sourceFieldId,
+    },
+  }));
 
   return {
-    schemaVersion: '1.0',
     artifactType: 'field-mapping',
-    capability,
+    version: '1.0',
     mappings,
   };
 }
@@ -205,11 +249,22 @@ export function generateTransforms(
   return transforms;
 }
 
+/** Export declarative formats for Synapse; no executable transform behavior. */
 export function generateTransformsArtifact(fields: Field[]): TransformsArtifact {
-  return {
-    schemaVersion: '1.0',
-    transforms: generateTransforms(fields),
-  };
+  assertSemanticQuality(fields);
+  const formats: TransformsArtifact['formats'] = {};
+  for (const field of fields.filter(isCanonicalField)) {
+    const declaration = resolveFieldTransform(field);
+    if (!declaration) continue;
+    if (declaration.type === 'phone' && formats.phone === undefined) {
+      formats.phone = declaration.format || '(xxx) xxx-xxxx';
+    } else if (declaration.type === 'date' && formats.date === undefined) {
+      formats.date = declaration.format || 'MM/DD/YYYY';
+    } else if (declaration.type === 'currency' && formats.currency === undefined) {
+      formats.currency = declaration.format || 'USD';
+    }
+  }
+  return { formats };
 }
 
 /** Group table fields into table definitions. */
@@ -258,18 +313,17 @@ export function generateManifest(
   const capability = normalizeCapability(options.capability);
   return {
     kind: 'capability',
-    schemaVersion: '1.0',
+    manifestVersion: '1.0',
+    version: '1.0.0',
     id: capability,
-    name: options.name?.trim() || capabilityToDisplayName(capability),
-    domain: 'general',
     type: 'document-completion',
     artifacts: {
       template: 'template.pdf',
+      schema: 'schema.json',
+      questions: 'questions.json',
       layout: 'layout.json',
       mapping: 'mapping.json',
       transforms: 'transforms.json',
-      fields: 'fields.json',
-      questions: 'questions.json',
       validation: 'validation.json',
     },
     capabilities: [
@@ -283,15 +337,17 @@ export function generateManifest(
 
 /** Generate required-field validation schema scaffold. */
 export function generateValidation(fields: Field[]): ValidationSchema {
+  assertSemanticQuality(fields);
   const requiredFields = fields
-    .filter((field) => field.semanticKey.trim() !== '' && (field.required ?? false))
+    .filter((field) => isCanonicalField(field) && (field.required ?? false))
     .map((field) => field.semanticKey);
 
   return {
-    schemaVersion: '1.0',
+    artifactType: 'validation',
+    version: '1.0',
     rules: requiredFields.map((fieldName) => ({
       field: fieldName,
-      required: true,
+      rule: 'required',
     })),
   };
 }
@@ -330,34 +386,36 @@ export function generateFieldsArtifact(fields: Field[]): FieldsArtifact {
   };
 }
 
-function mappingTransformsForField(field: Field): Array<{ type: string; format?: string }> {
-  const resolvedTransform = resolveFieldTransform(field);
-  return resolvedTransform ? [resolvedTransform] : [];
-}
-
-function toMappingId(fieldName: string): string {
-  const slug = fieldName
-    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
-    .replace(/[^a-zA-Z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .toLowerCase();
-  return `mapping-${slug || 'field'}`;
-}
-
-function inferInputType(field: Field): string {
+function inferSemanticType(field: Field): SemanticDataType {
+  if (field.dataType) return field.dataType;
+  const key = `${field.semanticKey} ${field.displayLabel}`.toLowerCase();
+  if (/\b(e[- ]?mail|emailaddress)\b/.test(key)) return 'email';
+  if (/\b(date\s*(?:and|&)\s*time|datetime|timestamp)\b/.test(key)) return 'datetime';
+  if (/\b(mailing\s*address|street\s*address|address)\b/.test(key)) return 'address';
+  if (/\b(date\s*of\s*birth|birth\s*date|marriage\s*date|date\s*of\s*marriage|effective\s*date|expiration\s*date)\b/.test(key)) return 'date';
+  if (/\b(routing\s*(?:number|no)|account\s*(?:number|no)|identifier|identification|\bid\b|file\s*number|policy\s*number|zip|postal\s*code)\b/.test(key)) return 'identifier';
+  if (/\b(name|first\s*name|last\s*name|full\s*name)\b/.test(key)) return 'text';
   if (field.type === 'checkbox') return 'boolean';
-  if (field.type === 'phone') return 'phone';
-  if (field.type === 'date') return 'date';
-  if (field.type === 'dob') return 'date';
+  if (field.type === 'date' || field.type === 'dob') return 'date';
+  if (field.type === 'phone' || /\b(phone|telephone|fax)\b/.test(key)) return 'phone';
   if (field.type === 'currency') return 'currency';
-  if (field.type === 'table') return 'table';
+  if (field.type === 'ssn' || /\b(ssn|social\s*security)\b/.test(key)) return 'ssn';
+  if (field.type === 'ein' || field.type === 'zip') {
+    return 'identifier';
+  }
+  if (/\b(amount|count|quantity|age|percentage|percent)\b/.test(key)) return 'number';
   return 'text';
 }
 
-function inferSemanticType(field: Field): string {
-  const key = `${field.semanticKey} ${field.displayLabel}`.toLowerCase();
-  if (/(address|street|city|state|zip|postal|county)/.test(key)) return 'address';
-  return inferInputType(field);
+function schemaFieldFormat(field: Field): { format?: { pattern: string } } {
+  const declaration = resolveFieldTransform(field);
+  if (!declaration || !['phone', 'date', 'currency'].includes(declaration.type)) return {};
+  const fallback = declaration.type === 'phone'
+    ? '(xxx) xxx-xxxx'
+    : declaration.type === 'date'
+      ? 'MM/DD/YYYY'
+      : 'USD';
+  return { format: { pattern: declaration.format || fallback } };
 }
 
 function resolveFieldTransform(field: Field): { type: string; format?: string } | null {
@@ -395,193 +453,78 @@ function resolveFieldTransform(field: Field): { type: string; format?: string } 
   return null;
 }
 
-function defaultRules(field: Field): string[] {
-  const required = field.required ?? false;
-
-  if (field.type === 'date') {
-    return required
-      ? ['non_empty', 'date_format:MM/DD/YYYY']
-      : ['date_format:MM/DD/YYYY'];
-  }
-  if (field.type === 'currency') {
-    return required ? ['non_empty', 'currency'] : ['currency'];
-  }
-  if (field.type === 'checkbox') return ['boolean'];
-
-  const base = [`max_length:${Math.max(1, Math.round(field.maxWidth ?? 175))}`];
-  return required ? ['non_empty', ...base] : base;
-}
-
-function buildFallbackQuestions(
-  fields: Field[],
-  capability?: string
-): QuestionExportSchema {
-  const resolvedCapability = normalizeCapability(capability);
-  const questions = fields
-    .filter(
-      (field) =>
-        field.sourceFieldId.trim() !== '' &&
-        field.semanticKey.trim() !== '' &&
-        field.displayLabel.trim() !== ''
-    )
-    .map((field): QuestionSchema => {
-      const label = field.displayLabel;
-      const target = field.sourceFieldId;
-
-      return {
-        id: field.sourceFieldId,
-        field: {
-          semanticKey: field.semanticKey,
-          target,
-        },
-        prompt: {
-          question: `What is the ${label.toLowerCase()}?`,
-          helpText: `Enter the applicant ${label.toLowerCase()}.`,
-        },
-        type: {
-          input: inferSemanticType(field),
-        },
-        validation: defaultRules(field),
-      };
-    });
-
-  return {
-    schemaVersion: '1.0',
-    capability: resolvedCapability,
-    questions,
-  };
-}
-
-function extractFirstJsonObject(raw: string): string | null {
-  const start = raw.indexOf('{');
-  const end = raw.lastIndexOf('}');
-  if (start === -1 || end === -1 || end <= start) return null;
-  return raw.slice(start, end + 1);
-}
-
-function normalizeQuestionWithFieldFallback(
-  question: any,
-  field: Field,
-  capability?: string
-): QuestionSchema {
-  void capability;
-  const label = field.displayLabel;
-  const target = field.sourceFieldId;
-  return {
-    id: typeof question?.id === 'string' && question.id ? question.id : field.sourceFieldId,
-    field: {
-      semanticKey: question?.field?.semanticKey ?? field.semanticKey,
-      target: question?.field?.target ?? target,
-    },
-    prompt: {
-      question: question?.prompt?.question ?? `What is the ${label.toLowerCase()}?`,
-      helpText: question?.prompt?.helpText ?? `Enter the applicant ${label.toLowerCase()}.`,
-    },
-    type: {
-      input: question?.type?.input ?? inferSemanticType(field),
-    },
-    validation: Array.isArray(question?.validation)
-      ? question.validation
-      : Array.isArray(question?.validation?.rules)
-        ? question.validation.rules
-        : defaultRules(field),
-  };
-}
-
-async function generateQuestionsWithOllama(
-  fields: Field[],
-  model = 'llama3.1:8b',
-  capability?: string
-): Promise<QuestionExportSchema> {
-  const resolvedCapability = normalizeCapability(capability);
-  const namedFields = fields.filter(
-    (f) =>
-      f.sourceFieldId.trim() !== '' &&
-      f.semanticKey.trim() !== '' &&
-      f.displayLabel.trim() !== ''
-  );
-  const fallback = buildFallbackQuestions(namedFields, resolvedCapability);
-  const fieldSpec = namedFields
-    .map((f) => ({
-      sourceFieldId: f.sourceFieldId,
-      semanticKey: f.semanticKey,
-      displayLabel: f.displayLabel,
-      type: f.type,
-      page: f.page + 1,
-    }));
-
-  const prompt = [
-    'Generate JSON only. No markdown. No explanation.',
-    'Return a single JSON object with keys: schemaVersion, capability, questions.',
-    `schemaVersion must be "1.0" and capability must be "${resolvedCapability}".`,
-    'Create exactly one question per provided field and preserve field mapping to each target field.',
-    'Each question must include: id, field.semanticKey, field.target, prompt.question, prompt.helpText, type.input, validation.',
-    'Field list JSON:',
-    JSON.stringify(fieldSpec),
-    'Set field.target to sourceFieldId exactly.',
-  ].join('\n');
-
-  const response = await fetch('http://localhost:11434/api/generate', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model,
-      prompt,
-      stream: false,
-      options: { temperature: 0.2 },
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Ollama request failed with status ${response.status}`);
-  }
-
-  const payload = await response.json();
-  const raw = typeof payload?.response === 'string' ? payload.response : '';
-  const jsonText = extractFirstJsonObject(raw);
-  if (!jsonText) {
-    throw new Error('Ollama returned non-JSON output');
-  }
-
-  const parsed = JSON.parse(jsonText);
-  if (!Array.isArray(parsed?.questions)) {
-    throw new Error('Ollama output missing questions array');
-  }
-
-  const normalizedQuestions = fallback.questions.map((_, index) =>
-    normalizeQuestionWithFieldFallback(
-      parsed.questions[index],
-      namedFields[index],
-      resolvedCapability
-    )
-  );
-
-  return {
-    schemaVersion: '1.0',
-    capability: resolvedCapability,
-    questions: normalizedQuestions,
-  };
-}
-
-/**
- * Generate field-linked questions. Uses local Ollama when available and
- * falls back to deterministic generation if unavailable.
- */
+/** Build question declarations directly from the canonical mapping order. */
 export async function generateQuestions(
   fields: Field[],
   options: GenerateQuestionsOptions = {}
 ): Promise<QuestionExportSchema> {
-  const useOllama = options.useOllama ?? true;
-  const capability = normalizeCapability(options.capability);
-  if (!useOllama) {
-    return buildFallbackQuestions(fields, capability);
+  void options;
+  assertSemanticQuality(fields);
+  const mappableFields = fields.filter(isCanonicalField);
+  const questions: QuestionSchema[] = [];
+  const questionByKey = new Map<string, QuestionSchema>();
+  for (const field of mappableFields) {
+    const existing = questionByKey.get(field.semanticKey);
+    if (existing) {
+      existing.required = existing.required || (field.required ?? false);
+      continue;
+    }
+    const question: QuestionSchema = {
+        id: field.semanticKey,
+        semanticKey: field.semanticKey,
+        prompt: {
+          label: canonicalDisplayLabel(field),
+          helpText: field.description?.trim() || descriptionFromSemanticKey(field.semanticKey),
+        },
+        input: { type: inferSemanticType(field) },
+        required: field.required ?? false,
+        order: questions.length + 1,
+        group: field.semanticKey.split('.')[0],
+      };
+    questions.push(question);
+    questionByKey.set(field.semanticKey, question);
   }
 
-  try {
-    return await generateQuestionsWithOllama(fields, options.ollamaModel, capability);
-  } catch {
-    return buildFallbackQuestions(fields, capability);
+  return {
+    artifactType: 'document-questions',
+    version: '1.0',
+    questions,
+  };
+}
+
+/** Export reusable canonical business fields only. */
+export async function generateDocumentSchema(
+  fields: Field[],
+  options: GenerateDocumentSchemaOptions = {}
+) {
+  assertSemanticQuality(fields);
+  const mappableFields = fields.filter(isCanonicalField);
+  const semanticFields = new Map<string, typeof mappableFields[number]>();
+  for (const field of mappableFields) {
+    const existing = semanticFields.get(field.semanticKey);
+    if (!existing) semanticFields.set(field.semanticKey, { ...field });
+    else if (field.required) semanticFields.set(field.semanticKey, { ...existing, required: true });
   }
+
+  return {
+    artifactType: 'document-schema' as const,
+    version: '1.0' as const,
+    capability: normalizeCapability(options.capability),
+    source: {
+      generator: 'acord-exporter',
+      version: '2.0',
+      generatedAt: options.generatedAt || new Date().toISOString().slice(0, 10),
+    },
+    fields: Array.from(semanticFields.values()).map(field => ({
+      semanticKey: field.semanticKey,
+      displayLabel: canonicalDisplayLabel(field),
+      description: field.description?.trim() || descriptionFromSemanticKey(field.semanticKey),
+      dataType: inferSemanticType(field),
+      cardinality: field.cardinality || 'single',
+      ...schemaFieldFormat(field),
+      required: field.required ?? false,
+    })),
+  };
 }
 
 /** Trigger a JSON file download in the browser. */

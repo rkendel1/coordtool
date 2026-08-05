@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Field, FieldType } from '../types/Field';
+import { requiresSemanticCorrection, suggestSemanticKey } from '../utils/fieldNames';
 import './FieldList.css';
 
 const TYPE_BADGE_COLORS: Record<FieldType, string> = {
@@ -62,6 +63,15 @@ export const FieldList: React.FC<Props> = ({
             {f.type}
           </span>
           <span className="fl-page">p{f.page + 1}</span>
+          {requiresSemanticCorrection(f) && (
+            <span
+              className="fl-warning"
+              title={`Semantic key needs correction: ${f.semanticKey} → ${suggestSemanticKey(f)}`}
+              aria-label="Semantic key warning"
+            >
+              ⚠
+            </span>
+          )}
           <div className="fl-name" title={`PDF field: ${f.sourceFieldId}`}>
             {f.displayLabel || f.sourceFieldId || <em>(unlabeled)</em>}
           </div>

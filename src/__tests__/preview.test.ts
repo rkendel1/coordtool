@@ -20,7 +20,7 @@ describe('Preview PDF Generation', () => {
         id: '1',
         name: 'testCheckbox',
         sourceFieldId: 'testCheckbox',
-        semanticKey: 'applicant.testCheckbox',
+        semanticKey: 'applicant.consent.accepted',
         displayLabel: 'Test Checkbox',
         page: 0,
         x: 100,
@@ -41,7 +41,7 @@ describe('Preview PDF Generation', () => {
 
     // Preview data (checkbox checked)
     const previewData = {
-      testCheckbox: 'true',
+      'applicant.consent.accepted': 'true',
     };
 
     // Render PDF

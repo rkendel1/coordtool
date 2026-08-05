@@ -191,6 +191,34 @@
   margin: 0 0 10px;
 }
 
+.sidebar-heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.sidebar-heading-row .sidebar-heading {
+  margin: 0;
+}
+
+.sidebar-fix-button {
+  border: 1px solid #d39328;
+  border-radius: 5px;
+  background: #fff8e0;
+  color: #8a5100;
+  padding: 4px 7px;
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.sidebar-fix-button:hover {
+  background: #ffedb3;
+}
+
 /* ── Viewer ────────────────────────────────── */
 .viewer-wrap {
   flex: 1;

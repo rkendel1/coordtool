@@ -8,7 +8,12 @@ import { ExportPanel } from './components/ExportPanel';
 import { PreviewPanel } from './components/PreviewPanel';
 import { Field, FieldType } from './types/Field';
 import { inferCapabilityId } from './utils/capability';
-import { ensureUniqueFieldName } from './utils/fieldNames';
+import {
+  ensureUniqueFieldName,
+  normalizeSemanticField,
+  requiresSemanticCorrection,
+  suggestSemanticKey,
+} from './utils/fieldNames';
 import { inferFieldMetadata } from './utils/fieldInference';
 import './App.css';
 
@@ -91,7 +96,7 @@ function App() {
       );
       return duplicate ? prev : [
         ...prev,
-        ensureUniqueFieldName(inferFieldMetadata(field), prev),
+        ensureUniqueFieldName(inferFieldMetadata(normalizeSemanticField(field)), prev),
       ];
     });
     setSelectedId((current) => current ?? field.id);
@@ -103,9 +108,10 @@ function App() {
       const evidenceChanged = field.sourceFieldId !== updated.sourceFieldId ||
         field.displayLabel !== updated.displayLabel;
       const typeWasNotManuallyChanged = field.type === updated.type;
+      const repaired = evidenceChanged ? normalizeSemanticField(updated) : updated;
       return evidenceChanged && typeWasNotManuallyChanged
-        ? inferFieldMetadata(updated)
-        : updated;
+        ? inferFieldMetadata(repaired)
+        : repaired;
     }));
   }, []);
 
@@ -113,6 +119,15 @@ function App() {
     setFields((prev) => prev.filter((f) => f.id !== id));
     setSelectedId((prev) => (prev === id ? null : prev));
   }, []);
+
+  // Flattened-page detections are provisional output from the opt-in OCR
+  // fallback. Remove them when that fallback is disabled; native and manually
+  // drawn fields use different id prefixes and remain untouched.
+  useEffect(() => {
+    if (enableOCR) return;
+    setFields((prev) => prev.filter((field) => !field.id.startsWith('flat-')));
+    setSelectedId((prev) => prev?.startsWith('flat-') ? null : prev);
+  }, [enableOCR]);
 
   useEffect(() => {
     const handleDeleteKey = (event: KeyboardEvent) => {
@@ -128,6 +143,17 @@ function App() {
   }, [selectedId, viewMode, handleFieldDeleted]);
 
   const selectedField = fields.find((f) => f.id === selectedId) ?? null;
+  const semanticWarnings = fields.filter(field =>
+    requiresSemanticCorrection(field)
+  ).length;
+
+  const handleApplyAllSemanticSuggestions = useCallback(() => {
+    setFields(previous => previous.map(field =>
+      requiresSemanticCorrection(field)
+        ? { ...field, semanticKey: suggestSemanticKey(field), semanticKeyOverride: false }
+        : field
+    ));
+  }, []);
 
   return (
     <div className="app">
@@ -231,6 +257,7 @@ function App() {
 
               <ExportPanel
                 fields={fields}
+                templateFile={pdfFile}
                 capabilityId={capabilityId}
                 compact
               />
@@ -262,7 +289,19 @@ function App() {
                 {/* Left sidebar */}
                 <aside className="sidebar">
                   <section className="sidebar-section sidebar-fields">
-                    <h2 className="sidebar-heading">Fields ({fields.length})</h2>
+                    <div className="sidebar-heading-row">
+                      <h2 className="sidebar-heading">Fields ({fields.length})</h2>
+                      {semanticWarnings > 0 && (
+                        <button
+                          type="button"
+                          className="sidebar-fix-button"
+                          onClick={handleApplyAllSemanticSuggestions}
+                          title="Apply suggested semantic keys to all warned fields"
+                        >
+                          ⚠ Fix all ({semanticWarnings})
+                        </button>
+                      )}
+                    </div>
                     <FieldList
                       fields={fields}
                       selectedId={selectedId}
