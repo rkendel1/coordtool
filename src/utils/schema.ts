@@ -114,20 +114,6 @@ function capabilityToDisplayName(capability: string): string {
   return `${words.join(' ')} Completion`;
 }
 
-function inferDomain(capability: string): 'insurance' | 'government' | 'general' {
-  const key = capability.toLowerCase();
-
-  if (/(^va\.|\.va\.|\bgov\b|\birs\b|\bfederal\b|\bstate\b|\bcounty\b|\bmunicipal\b)/.test(key)) {
-    return 'government';
-  }
-
-  if (/(insurance|carrier|acord|policy|claim|underwrit)/.test(key)) {
-    return 'insurance';
-  }
-
-  return 'general';
-}
-
 /** Generate the unified layout schema (single source of truth). */
 export function generateLayout(fields: Field[]): Record<string, LayoutEntry> {
   const layout: Record<string, LayoutEntry> = {};
@@ -275,7 +261,7 @@ export function generateManifest(
     schemaVersion: '1.0',
     id: capability,
     name: options.name?.trim() || capabilityToDisplayName(capability),
-    domain: inferDomain(capability),
+    domain: 'general',
     type: 'document-completion',
     artifacts: {
       template: 'template.pdf',

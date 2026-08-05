@@ -62,8 +62,8 @@ export const FieldList: React.FC<Props> = ({
             {f.type}
           </span>
           <span className="fl-page">p{f.page + 1}</span>
-          <div className="fl-name" title={f.sourceFieldId}>
-            {f.sourceFieldId || f.displayLabel || <em>(unlabeled)</em>}
+          <div className="fl-name" title={`PDF field: ${f.sourceFieldId}`}>
+            {f.displayLabel || f.sourceFieldId || <em>(unlabeled)</em>}
           </div>
           <button
             className="fl-del"

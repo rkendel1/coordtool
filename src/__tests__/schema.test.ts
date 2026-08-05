@@ -236,7 +236,7 @@ describe('generateManifest', () => {
       schemaVersion: '1.0',
       id: 'carrier.form.001',
       name: 'CARRIER FORM 001 Completion',
-      domain: 'insurance',
+      domain: 'general',
       type: 'document-completion',
       artifacts: {
         template: 'template.pdf',
@@ -263,9 +263,9 @@ describe('generateManifest', () => {
     expect(manifest.name).toBe('CARRIER FORM 130 Completion');
   });
 
-  it('infers government domain from capability id', () => {
+  it('keeps capability manifests domain neutral', () => {
     const manifest = generateManifest({ capability: 'va.22-5940' });
-    expect(manifest.domain).toBe('government');
+    expect(manifest.domain).toBe('general');
   });
 });
 

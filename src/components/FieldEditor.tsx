@@ -168,7 +168,7 @@ export const FieldEditor: React.FC<Props> = ({ field, onChange, onDelete }) => {
     <div className="field-editor">
       <h3 className="fe-title">Edit Field</h3>
 
-      <label className="fe-label">Source Field ID</label>
+      <label className="fe-label" title="The original internal field name embedded in the PDF">PDF Source ID</label>
       <input
         className="fe-input"
         type="text"

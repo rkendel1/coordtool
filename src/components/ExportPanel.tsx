@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
+import JSZip from 'jszip';
 import { Field } from '../types/Field';
 import {
   generateLayoutArtifact,
@@ -25,6 +26,8 @@ export const ExportPanel: React.FC<Props> = ({
   compact = false,
 }) => {
   const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false);
+  const [progressMessage, setProgressMessage] = useState('');
+  const detailsRef = useRef<HTMLDetailsElement>(null);
   const validFields = fields.filter(
     (f) =>
       f.sourceFieldId.trim() !== '' &&
@@ -34,69 +37,62 @@ export const ExportPanel: React.FC<Props> = ({
   const normalizedCapability = capabilityId.trim().toLowerCase();
   const canExport = validFields.length > 0 && normalizedCapability.length > 0;
 
-  const handleExportLayout = () => {
-    downloadJson(generateLayoutArtifact(validFields), 'layout.json');
-  };
-
-  const handleExportMapping = () => {
-    downloadJson(generateMapping(validFields, { capability: normalizedCapability }), 'mapping.json');
-  };
-
-  const handleExportTransforms = () => {
-    downloadJson(generateTransformsArtifact(validFields), 'transforms.json');
-  };
-
-  const handleExportFields = () => {
-    downloadJson(generateFieldsArtifact(validFields), 'fields.json');
-  };
-
-  const handleExportManifest = () => {
-    downloadJson(generateManifest({ capability: normalizedCapability }), 'manifest.json');
-  };
-
-  const handleExportValidation = () => {
-    downloadJson(generateValidationArtifact(validFields), 'validation.json');
-  };
-
-  const handleExportQuestions = async () => {
-    if (!canExport) return;
+  const generateArtifacts = async () => {
     setIsGeneratingQuestions(true);
-    try {
-      const questions = await generateQuestions(validFields, {
-        capability: normalizedCapability,
-      });
-      downloadJson(questions, 'questions.json');
-    } catch (err) {
-      console.error('Question export failed:', err);
-      alert('Failed to generate questions.json');
-    } finally {
-      setIsGeneratingQuestions(false);
-    }
+    setProgressMessage('Generating questions — this is the longest step…');
+    await new Promise(resolve => window.setTimeout(resolve, 0));
+    const questions = await generateQuestions(validFields, {
+      capability: normalizedCapability,
+    });
+    return {
+      layout: generateLayoutArtifact(validFields),
+      mapping: generateMapping(validFields, { capability: normalizedCapability }),
+      transforms: generateTransformsArtifact(validFields),
+      fields: generateFieldsArtifact(validFields),
+      tables: generateTables(validFields),
+      manifest: generateManifest({ capability: normalizedCapability }),
+      validation: generateValidationArtifact(validFields),
+      questions,
+    };
   };
 
-  const handleExportAll = async () => {
+  const handleExportSchema = async () => {
     if (!canExport) return;
-    setIsGeneratingQuestions(true);
     try {
-      const questions = await generateQuestions(validFields, {
-        capability: normalizedCapability,
-      });
-      const schema = {
-        layout: generateLayoutArtifact(validFields),
-        mapping: generateMapping(validFields, { capability: normalizedCapability }),
-        transforms: generateTransformsArtifact(validFields),
-        fields: generateFieldsArtifact(validFields),
-        tables: generateTables(validFields),
-        manifest: generateManifest({ capability: normalizedCapability }),
-        validation: generateValidationArtifact(validFields),
-        questions,
-      };
-      downloadJson(schema, 'schema.json');
+      const artifacts = await generateArtifacts();
+      setProgressMessage('Preparing schema.json…');
+      downloadJson(artifacts, 'schema.json');
     } catch (err) {
       console.error('Combined export failed:', err);
       alert('Failed to export schema.json');
     } finally {
       setIsGeneratingQuestions(false);
+      setProgressMessage('');
+    }
+  };
+
+  const handleExportZip = async () => {
+    if (!canExport) return;
+    try {
+      const artifacts = await generateArtifacts();
+      setProgressMessage('Compressing export ZIP…');
+      const zip = new JSZip();
+      Object.entries(artifacts).forEach(([name, data]) => {
+        zip.file(`${name}.json`, JSON.stringify(data, null, 2));
+      });
+      const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'schema-artifacts.zip';
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('ZIP export failed:', err);
+      alert('Failed to export schema-artifacts.zip');
+    } finally {
+      setIsGeneratingQuestions(false);
+      setProgressMessage('');
     }
   };
 
@@ -109,7 +105,12 @@ export const ExportPanel: React.FC<Props> = ({
 
   const panel = (
     <div className={`export-panel${compact ? ' export-panel-compact' : ''}`}>
-      <h3 className="ep-title">Export</h3>
+      <div className="ep-heading">
+        <h3 className="ep-title">Export</h3>
+        {compact && (
+          <button className="ep-close" onClick={() => detailsRef.current?.removeAttribute('open')} aria-label="Close export">×</button>
+        )}
+      </div>
 
       {incomplete > 0 && (
         <p className="ep-warn">
@@ -127,76 +128,33 @@ export const ExportPanel: React.FC<Props> = ({
 
       <div className="ep-buttons">
         <button
-          className="ep-btn"
-          onClick={handleExportLayout}
-          disabled={!canExport}
-          title="Download layout.json — coordinates + types"
-        >
-          📐 layout.json
-        </button>
-        <button
-          className="ep-btn"
-          onClick={handleExportMapping}
-          disabled={!canExport}
-          title="Download mapping.json — canonical mapping scaffold"
-        >
-          🗺 mapping.json
-        </button>
-        <button
-          className="ep-btn"
-          onClick={handleExportTransforms}
-          disabled={!canExport}
-          title="Download transforms.json — format rules"
-        >
-          🔧 transforms.json
-        </button>
-        <button
-          className="ep-btn"
-          onClick={handleExportFields}
-          disabled={!canExport}
-          title="Download fields.json — semantic/physical field registry"
-        >
-          🧾 fields.json
-        </button>
-        <button
-          className="ep-btn"
-          onClick={handleExportManifest}
-          disabled={!canExport}
-          title="Download manifest.json — capability metadata"
-        >
-          🧭 manifest.json
-        </button>
-        <button
-          className="ep-btn"
-          onClick={handleExportValidation}
-          disabled={!canExport}
-          title="Download validation.json — required-field rules"
-        >
-          ✅ validation.json
-        </button>
-        <button
-          className="ep-btn"
-          onClick={handleExportQuestions}
+          className="ep-btn ep-btn-primary"
+          onClick={handleExportZip}
           disabled={!canExport || isGeneratingQuestions}
-          title="Download questions.json — field-linked intake questions"
         >
-          ❓ {isGeneratingQuestions ? 'Generating questions...' : 'questions.json'}
+          📦 Export all as ZIP
         </button>
         <button
           className="ep-btn ep-btn-primary"
-          onClick={handleExportAll}
+          onClick={handleExportSchema}
           disabled={!canExport || isGeneratingQuestions}
-          title="Download combined schema.json"
         >
-          ⬇ {isGeneratingQuestions ? 'Generating...' : 'Export All (schema.json)'}
+          🧩 Export as one schema.json
         </button>
       </div>
+
+      {isGeneratingQuestions && (
+        <div className="ep-progress" role="status" aria-live="polite">
+          <span className="ep-spinner" />
+          <span>{progressMessage}</span>
+        </div>
+      )}
     </div>
   );
 
   if (compact) {
     return (
-      <details className="header-export">
+      <details className="header-export" ref={detailsRef}>
         <summary>Export ({validFields.length})</summary>
         {panel}
       </details>

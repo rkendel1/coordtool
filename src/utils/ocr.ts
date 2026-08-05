@@ -78,8 +78,12 @@ export async function extractTextWithOCR(
  * Convert a label like "Insured Name:" to camelCase field name "insuredName"
  */
 export function labelToFieldName(label: string): string {
+  const meaningfulLabel = label
+    .replace(/^\s*\d+[A-Z]?\.\s*/i, '')
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/\b(?:do not write in this space|type or print|if applicable|optional)\b/gi, ' ');
   // Remove punctuation, split by spaces/special chars
-  const cleaned = label
+  const cleaned = meaningfulLabel
     .replace(/[^\w\s]/g, '')
     .trim()
     .toLowerCase();

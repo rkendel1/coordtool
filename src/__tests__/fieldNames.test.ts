@@ -1,4 +1,9 @@
-import { ensureUniqueFieldName } from '../utils/fieldNames';
+import {
+  displayLabelFromPdfFieldId,
+  ensureUniqueFieldName,
+  semanticKeyFromPdfFieldId,
+  stripPdfFieldPrefix,
+} from '../utils/fieldNames';
 import { Field } from '../types/Field';
 
 const field = (sourceFieldId: string): Field => ({
@@ -17,4 +22,11 @@ it('adds the next available stable suffix to duplicate generated names', () => {
 
 it('compares names case-insensitively', () => {
   expect(ensureUniqueFieldName(field('Premium'), [field('premium')]).sourceFieldId).toBe('Premium_2');
+});
+
+it('hides PDF implementation prefixes from semantic names and labels', () => {
+  expect(stripPdfFieldPrefix('f0p30veteransname0')).toBe('veteransname');
+  expect(displayLabelFromPdfFieldId('f0p30mailingAddress_street0')).toBe('Mailing Address Street');
+  expect(semanticKeyFromPdfFieldId('f0p30mailingAddress_street0')).toBe('data.mailingAddressStreet');
+  expect(stripPdfFieldPrefix('form10page_30signaturefield110')).toBe('signaturefield');
 });

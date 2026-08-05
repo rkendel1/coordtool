@@ -9,6 +9,7 @@ import { PreviewPanel } from './components/PreviewPanel';
 import { Field, FieldType } from './types/Field';
 import { inferCapabilityId } from './utils/capability';
 import { ensureUniqueFieldName } from './utils/fieldNames';
+import { inferFieldMetadata } from './utils/fieldInference';
 import './App.css';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `${process.env.PUBLIC_URL}/pdf.worker.min.mjs`;
@@ -88,13 +89,24 @@ function App() {
           Math.abs(existing.width - field.width) < 6 &&
           Math.abs(existing.height - field.height) < 6)
       );
-      return duplicate ? prev : [...prev, ensureUniqueFieldName(field, prev)];
+      return duplicate ? prev : [
+        ...prev,
+        ensureUniqueFieldName(inferFieldMetadata(field), prev),
+      ];
     });
     setSelectedId((current) => current ?? field.id);
   }, []);
 
   const handleFieldChanged = useCallback((updated: Field) => {
-    setFields((prev) => prev.map((f) => (f.id === updated.id ? updated : f)));
+    setFields((prev) => prev.map((field) => {
+      if (field.id !== updated.id) return field;
+      const evidenceChanged = field.sourceFieldId !== updated.sourceFieldId ||
+        field.displayLabel !== updated.displayLabel;
+      const typeWasNotManuallyChanged = field.type === updated.type;
+      return evidenceChanged && typeWasNotManuallyChanged
+        ? inferFieldMetadata(updated)
+        : updated;
+    }));
   }, []);
 
   const handleFieldDeleted = useCallback((id: string) => {
@@ -149,7 +161,7 @@ function App() {
                 type="text"
                 value={capabilityId}
                 onChange={(e) => setCapabilityId(e.target.value)}
-                placeholder="carrier.form.001"
+                placeholder="document.example"
                 title="Used for manifest/mapping/questions capability ids and target prefixes"
               />
               

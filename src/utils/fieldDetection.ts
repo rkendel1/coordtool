@@ -7,6 +7,8 @@ export interface DetectedRegion {
   height: number;
   label?: string;
   confidence: number;
+  kind?: 'text' | 'checkbox' | 'boxedText';
+  boxCount?: number;
 }
 
 interface Line { at: number; from: number; to: number; }
@@ -28,7 +30,9 @@ const mergeLines = (lines: Line[], tolerance = 3): Line[] => {
 function runs(bits: Uint8Array, width: number, height: number, horizontal: boolean): Line[] {
   const major = horizontal ? height : width;
   const minor = horizontal ? width : height;
-  const minimum = Math.max(18, Math.round(minor * 0.025));
+  // Keep this low enough for standalone checkbox borders while the later
+  // closed-cell checks filter ordinary text strokes.
+  const minimum = Math.max(8, Math.round(minor * 0.006));
   const found: Line[] = [];
   for (let a = 0; a < major; a++) {
     let start = -1;
@@ -75,7 +79,41 @@ export function detectFieldRegions(
       const right = Math.min(top.to, bottom.to);
       const sides = vertical.filter(v => v.at >= left - 4 && v.at <= right + 4 && covers(v, top.at, bottom.at));
       let addedForPair = false;
+      const consumedSides = new Set<number>();
+      for (let runStart = 0; runStart + 1 < sides.length;) {
+        let runEnd = runStart;
+        while (runEnd + 1 < sides.length) {
+          const cellLeft = sides[runEnd].at;
+          const cellRight = sides[runEnd + 1].at;
+          const cellWidth = cellRight - cellLeft;
+          const hasText = words.some(word =>
+            word.x + word.width / 2 > cellLeft && word.x + word.width / 2 < cellRight &&
+            word.y + word.height / 2 > top.at && word.y + word.height / 2 < bottom.at);
+          // Tolerate a missing divider in a character-box run. That produces
+          // one interval roughly twice as wide as its neighbors.
+          if (hasText || cellWidth < 7 || cellWidth > Math.max(44, cellHeight * 3)) break;
+          runEnd++;
+        }
+        const boxCount = runEnd - runStart;
+        if (boxCount >= 2) {
+          const groupLeft = sides[runStart].at;
+          const groupRight = sides[runEnd].at;
+          const nearby = findNearbyLabel(groupLeft, top.at, groupRight - groupLeft, cellHeight, words, 140);
+          output.push({
+            x: groupLeft + 1, y: top.at + 2,
+            width: groupRight - groupLeft - 2, height: cellHeight - 3,
+            label: nearby ? labelToFieldName(nearby) : undefined,
+            confidence: 0.9, kind: 'boxedText', boxCount,
+          });
+          for (let index = runStart; index < runEnd; index++) consumedSides.add(index);
+          addedForPair = true;
+          runStart = runEnd;
+        } else {
+          runStart++;
+        }
+      }
       for (let sideIndex = 0; sideIndex + 1 < sides.length; sideIndex++) {
+        if (consumedSides.has(sideIndex)) continue;
         const x1 = sides[sideIndex].at;
         const x2 = sides[sideIndex + 1].at;
         const cellWidth = x2 - x1;
@@ -89,6 +127,8 @@ export function detectFieldRegions(
           ? insideWords.reduce((sum, word) => sum + word.height, 0) / insideWords.length
           : 0;
         const cellText = insideWords.map(word => word.text).join(' ').trim();
+        if (/^(?:section\b|part\b|note\b|important\b|penalty\b|i certify\b)/i.test(cellText)) continue;
+        if (cellText.length > 60 || cellText.split(/\s+/).filter(Boolean).length > 8) continue;
         const contentTop = Math.max(top.at + 2, textBottom + 2);
         const belowHeight = bottom.at - contentTop - 1;
         const rightLeft = textRight + 3;
@@ -119,6 +159,9 @@ export function detectFieldRegions(
           x: regionX, y: regionY, width: regionWidth, height: regionHeight,
           label: label ? labelToFieldName(label) : undefined,
           confidence: Math.min(0.99, 0.65 + (insideWords.length ? 0.2 : 0)),
+          kind: !insideWords.length && cellWidth <= Math.max(28, cellHeight * 1.6)
+            ? 'checkbox'
+            : 'text',
         });
         addedForPair = true;
       }
