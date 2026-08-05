@@ -13,6 +13,7 @@ import { detectFieldRegions } from '../utils/fieldDetection';
 import { displayLabelFromPdfFieldId, semanticKeyFromPdfFieldId } from '../utils/fieldNames';
 import { DocumentProfile } from '../utils/documentProfile';
 import { acordLayoutStatus } from '../acord/workflow';
+import { semanticKeyForAcordField } from '../acord/fieldMetadata';
 import './PDFViewer.css';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `${process.env.PUBLIC_URL}/pdf.worker.min.mjs`;
@@ -105,6 +106,29 @@ function annotationDisplayLabel(annotation: any, sourceFieldId: string): string 
       .trim();
   }
   return toDisplayLabelFromFieldId(sourceFieldId) || sourceFieldId;
+}
+
+function printedLabelBesideWidget(
+  rect: number[],
+  viewport: pdfjsLib.PageViewport,
+  words: OCRWord[]
+): string {
+  const viewportRect = viewport.convertToViewportRectangle(rect);
+  const left = Math.min(viewportRect[0], viewportRect[2]);
+  const right = Math.max(viewportRect[0], viewportRect[2]);
+  const top = Math.min(viewportRect[1], viewportRect[3]);
+  const bottom = Math.max(viewportRect[1], viewportRect[3]);
+  const centerY = (top + bottom) / 2;
+  const candidates = words.filter((word) => {
+    const wordCenterY = word.y + word.height / 2;
+    const gap = word.x - right;
+    return Math.abs(wordCenterY - centerY) <= Math.max(8, bottom - top) &&
+      gap >= -3 && gap <= 150;
+  }).sort((a, b) => a.x - b.x);
+  if (candidates.length > 0) return candidates[0].text.trim();
+
+  const nearby = findNearbyLabel(left, top, right - left, bottom - top, words, 80);
+  return nearby?.trim() || '';
 }
 
 async function extractEmbeddedPdfWords(
@@ -300,7 +324,7 @@ export const PDFViewer: React.FC<Props> = ({
         const acordPage = index === pageNum - 1 ? page : await pdf.getPage(index + 1);
         const acordViewport = acordPage.getViewport({ scale: SCALE });
         const words = await extractEmbeddedPdfWords(acordPage, acordViewport);
-        const result = await autoDetectFormFields(acordPage, acordViewport, index, words);
+        const result = await autoDetectFormFields(acordPage, acordViewport, index, words, true);
         detectedCount += result.count;
       }
       if (requestId !== renderRequestRef.current) return;
@@ -405,7 +429,8 @@ export const PDFViewer: React.FC<Props> = ({
     page: pdfjsLib.PDFPageProxy,
     viewport: pdfjsLib.PageViewport,
     pageIndex: number,
-    words: OCRWord[] = []
+    words: OCRWord[] = [],
+    acordMode = false
   ): Promise<NativeDetectionResult> => {
     try {
       const annotations = await page.getAnnotations();
@@ -445,13 +470,22 @@ export const PDFViewer: React.FC<Props> = ({
         const sourceFieldId = typeof ann.fieldName === 'string' && ann.fieldName.trim()
           ? ann.fieldName.trim()
           : `pdf_field_${ann.id || pageIndex + 1}`;
-        const displayLabel = annotationDisplayLabel(ann, sourceFieldId);
+        const metadataLabel = annotationDisplayLabel(ann, sourceFieldId);
+        const nearbyLabel = acordMode && /^check\s*box\d*$/i.test(metadataLabel)
+          ? printedLabelBesideWidget(ann.rect, viewport, words)
+          : '';
+        const displayLabel = nearbyLabel || metadataLabel;
         
         const newField: Field = {
           id: `auto-${Date.now()}-${Math.random()}`,
           name: sourceFieldId,
           sourceFieldId,
-          semanticKey: toSemanticKeyFromFieldId(displayLabel),
+          semanticKey: acordMode
+            ? semanticKeyForAcordField(
+                sourceFieldId, displayLabel, fieldType, pageIndex,
+                documentProfile.kind === 'acord' ? documentProfile.formNumber : undefined
+              )
+            : toSemanticKeyFromFieldId(displayLabel),
           semanticContext: semanticContextForRect(ann.rect, viewport, words),
           displayLabel,
           page: pageIndex,

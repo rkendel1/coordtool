@@ -118,7 +118,7 @@ function App() {
       );
       return duplicate ? prev : [
         ...prev,
-        ensureUniqueFieldName(inferFieldMetadata(normalizeSemanticField(field)), prev),
+        ensureUniqueFieldName(normalizeSemanticField(inferFieldMetadata(field)), prev),
       ];
     });
     setSelectedId((current) => current ?? field.id);
@@ -151,18 +151,19 @@ function App() {
     setSelectedId((prev) => prev?.startsWith('flat-') ? null : prev);
   }, [enableOCR]);
 
-  // Remove the retired screenshot-derived ACORD starter after Fast Refresh.
-  // Authoritative AcroForm widgets use the auto- prefix and are retained.
+  // Clear prior ACORD imports when the detected ACORD profile changes. The
+  // dedicated scan immediately recreates them with current labels/semantics.
   useEffect(() => {
     if (documentProfile.kind !== 'acord') return;
     setFields((previous) => {
-      const hasRetiredStarter = previous.some((field) =>
-        /^acord-125-v\d+-/.test(field.id));
-      return hasRetiredStarter
-        ? previous.filter((field) => !/^acord-125-v\d+-/.test(field.id))
+      const hasGeneratedAcordFields = previous.some((field) =>
+        /^acord-125-v\d+-/.test(field.id) || field.id.startsWith('auto-'));
+      return hasGeneratedAcordFields
+        ? previous.filter((field) =>
+            !/^acord-125-v\d+-/.test(field.id) && !field.id.startsWith('auto-'))
         : previous;
     });
-  }, [documentProfile.kind]);
+  }, [documentProfile]);
 
   useEffect(() => {
     const handleDeleteKey = (event: KeyboardEvent) => {
