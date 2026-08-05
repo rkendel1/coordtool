@@ -3,11 +3,11 @@
  * Implements Phase 3, Item 9: Build a form registry
  */
 
-import { LayoutEntry, MappingEntry, TransformEntry, TableDefinition } from '../types/Field';
+import { LayoutEntry, MappingSchema, TransformEntry, TableDefinition } from '../types/Field';
 
 export interface FormSchema {
   layout: Record<string, LayoutEntry>;
-  mapping: Record<string, MappingEntry>;
+  mapping: MappingSchema;
   transforms: Record<string, TransformEntry>;
   tables?: Record<string, TableDefinition>;
 }
@@ -87,7 +87,7 @@ export class FormRegistry {
     version: string,
     schemaData: {
       layout: Record<string, LayoutEntry>;
-      mapping: Record<string, MappingEntry>;
+      mapping: MappingSchema;
       transforms: Record<string, TransformEntry>;
       tables?: Record<string, TableDefinition>;
     }

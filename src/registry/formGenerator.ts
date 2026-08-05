@@ -23,23 +23,21 @@ export interface GeneratedForm {
 
 /**
  * Decide which forms to generate based on data
- * This is a placeholder - real implementation would contain business logic
+ * Uses explicit request data when available, otherwise falls back to
+ * registered forms when generateAllForms is enabled.
  */
 export function decideForms(data: Record<string, any>): string[] {
-  const forms: string[] = [];
-  
-  // Example logic - customize based on your needs
-  if (data.applicationType === 'commercial') {
-    forms.push('acord-126');
+  if (Array.isArray(data.requestedForms)) {
+    return data.requestedForms
+      .filter((formId: unknown) => typeof formId === 'string' && formId.trim() !== '')
+      .map((formId: string) => formId.trim());
   }
-  if (data.hasLosses) {
-    forms.push('acord-130');
+
+  if (data.generateAllForms === true) {
+    return formRegistry.listForms().map((form) => form.id);
   }
-  if (data.certificateRequest) {
-    forms.push('acord-125');
-  }
-  
-  return forms;
+
+  return [];
 }
 
 /**

@@ -4,11 +4,11 @@ import {
   wrapText,
   handleMultilineOverflow,
 } from '../renderer/pdfRenderer';
-import { MappingEntry, TransformEntry } from '../types/Field';
+import { LegacyMappingEntry, MappingArtifact, TransformEntry } from '../types/Field';
 
 describe('resolveValue', () => {
   it('resolves simple data path', () => {
-    const mapping: Record<string, MappingEntry> = {
+    const mapping: Record<string, LegacyMappingEntry> = {
       'applicant.name': { target: 'applicantName', transform: [] },
     };
     const data = {
@@ -19,7 +19,7 @@ describe('resolveValue', () => {
   });
 
   it('resolves nested data path', () => {
-    const mapping: Record<string, MappingEntry> = {
+    const mapping: Record<string, LegacyMappingEntry> = {
       'policy.address.city': { target: 'city', transform: [] },
     };
     const data = {
@@ -30,14 +30,14 @@ describe('resolveValue', () => {
   });
 
   it('returns undefined for missing mapping', () => {
-    const mapping: Record<string, MappingEntry> = {};
+    const mapping: Record<string, LegacyMappingEntry> = {};
     const data = {};
     
     expect(resolveValue(mapping, data, 'missing')).toBeUndefined();
   });
 
   it('handles TODO prefix in mapping keys', () => {
-    const mapping: Record<string, MappingEntry> = {
+    const mapping: Record<string, LegacyMappingEntry> = {
       'TODO.applicant.name': { target: 'applicantName', transform: [] },
     };
     const data = {
@@ -46,6 +46,45 @@ describe('resolveValue', () => {
     
     expect(resolveValue(mapping, data, 'applicantName')).toBe('Jane Smith');
   });
+
+  it('resolves value from mapping artifact semantic key', () => {
+    const mapping: MappingArtifact = {
+      schemaVersion: '1.0',
+      artifactType: 'field-mapping',
+      capability: 'acord.form.125',
+      mappings: [
+        {
+          id: 'mapping-agent-name',
+          semantic: {
+            key: 'party.agent.name',
+            label: 'Agent Name',
+            type: 'text',
+          },
+          target: {
+            field: 'agentsname',
+            layoutReference: 'agentsname',
+          },
+          resolution: {
+            sources: [{ type: 'crm', path: 'agent.name' }, { type: 'user.input' }],
+            priority: ['crm', 'organization.directory', 'user.input'],
+          },
+          transform: [],
+          confidence: { score: 0, status: 'unverified' },
+          status: 'suggested',
+        },
+      ],
+    };
+
+    const data = {
+      party: {
+        agent: {
+          name: 'Morgan Agent',
+        },
+      },
+    };
+
+    expect(resolveValue(mapping, data, 'agentsname')).toBe('Morgan Agent');
+  });
 });
 
 describe('applyTransforms', () => {
@@ -53,7 +92,7 @@ describe('applyTransforms', () => {
     const transforms: Record<string, TransformEntry> = {
       effectiveDate: { type: 'date', format: 'MM/DD/YYYY' },
     };
-    const date = new Date('2024-03-15');
+    const date = new Date('2024-03-15T12:00:00Z');
     
     expect(applyTransforms('effectiveDate', date, transforms)).toBe('03/15/2024');
   });

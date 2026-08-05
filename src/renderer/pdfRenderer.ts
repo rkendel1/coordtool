@@ -4,7 +4,15 @@
  */
 
 import { PDFDocument, PDFPage, rgb } from 'pdf-lib';
-import { LayoutEntry, MappingEntry, TransformEntry, TableDefinition } from '../types/Field';
+import {
+  LayoutEntry,
+  MappingSchema,
+  LegacyMappingEntry,
+  MappingArtifact,
+  MappingTransform,
+  TransformEntry,
+  TableDefinition,
+} from '../types/Field';
 import { applyFormatter } from '../formatters';
 
 export interface PageOffset {
@@ -15,7 +23,7 @@ export interface PageOffset {
 export interface RenderOptions {
   pdfTemplate: Uint8Array | ArrayBuffer;
   layout: Record<string, LayoutEntry>;
-  mapping: Record<string, MappingEntry>;
+  mapping: MappingSchema;
   transforms: Record<string, TransformEntry>;
   data: Record<string, any>;
   tables?: Record<string, TableDefinition>;
@@ -29,19 +37,39 @@ export interface RenderOptions {
  * Note: Mapping keys may have 'TODO.' prefix for unmapped/placeholder fields
  */
 export function resolveValue(
-  mapping: Record<string, MappingEntry>,
+  mapping: MappingSchema,
   data: Record<string, any>,
   fieldName: string
 ): any {
+  if ('mappings' in mapping && Array.isArray(mapping.mappings)) {
+    const mappingEntry = mapping.mappings.find((entry) => entry.target.field === fieldName);
+    if (!mappingEntry) return undefined;
+
+    const dataPath = mappingEntry.semantic.key;
+    const parts = dataPath.split('.');
+    let value = data;
+
+    for (const part of parts) {
+      if (value === null || value === undefined) {
+        return data[mappingEntry.target.field];
+      }
+      value = value[part];
+    }
+
+    return value ?? data[mappingEntry.target.field];
+  }
+
+  const legacyMapping = mapping as Record<string, LegacyMappingEntry>;
+
   // Find mapping entry that targets this field
-  const mappingKey = Object.keys(mapping).find(
-    (key) => mapping[key].target === fieldName
+  const mappingKey = Object.keys(legacyMapping).find(
+    (key) => legacyMapping[key].target === fieldName
   );
-  
+
   if (!mappingKey) {
     return undefined;
   }
-  
+
   // Extract the data path from the mapping key
   // e.g., "applicant.name" from mapping key "applicant.name" or "TODO.applicant.name"
   const dataPath = mappingKey.replace(/^TODO\./, '');
@@ -66,8 +94,19 @@ export function resolveValue(
 export function applyTransforms(
   fieldName: string,
   value: any,
-  transforms: Record<string, TransformEntry>
+  transforms: Record<string, TransformEntry>,
+  mapping?: MappingSchema
 ): string {
+  if (mapping && 'mappings' in mapping && Array.isArray(mapping.mappings)) {
+    const mappingEntry = mapping.mappings.find((entry) => entry.target.field === fieldName);
+    const mappingTransforms: MappingTransform[] = mappingEntry?.transform ?? [];
+    if (mappingTransforms.length > 0) {
+      return mappingTransforms.reduce((currentValue, transformRule) => {
+        return applyFormatter(currentValue, transformRule.type, transformRule.format);
+      }, value);
+    }
+  }
+
   const transform = transforms[fieldName];
   
   if (!transform) {
@@ -324,7 +363,7 @@ export async function renderPdf(options: RenderOptions): Promise<Uint8Array> {
     const rawValue = resolveValue(mapping, data, fieldName);
     
     // Apply transforms
-    const formattedValue = applyTransforms(fieldName, rawValue, transforms);
+    const formattedValue = applyTransforms(fieldName, rawValue, transforms, mapping);
     
     // Get page and offset
     const page = pages[field.page];

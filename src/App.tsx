@@ -33,6 +33,7 @@ function App() {
   const [enableOCR, setEnableOCR] = useState(false);
   const [enableAutoDetect, setEnableAutoDetect] = useState(false);
   const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
+  const [capabilityId, setCapabilityId] = useState('');
 
   // Load total pages when file changes
   useEffect(() => {
@@ -102,6 +103,16 @@ function App() {
                   </option>
                 ))}
               </select>
+
+              <label className="ctrl-label">Capability:</label>
+              <input
+                className="ctrl-select"
+                type="text"
+                value={capabilityId}
+                onChange={(e) => setCapabilityId(e.target.value)}
+                placeholder="carrier.form.001"
+                title="Used for manifest/mapping/questions capability ids and target prefixes"
+              />
               
               <label className="ctrl-label">Grid:</label>
               <select
@@ -209,7 +220,10 @@ function App() {
                   )}
 
                   <section className="sidebar-section">
-                    <ExportPanel fields={fields} />
+                    <ExportPanel
+                      fields={fields}
+                      capabilityId={capabilityId}
+                    />
                   </section>
                 </aside>
 

@@ -51,10 +51,67 @@ export interface LayoutEntry {
   checkboxStyle?: 'X' | 'checkmark' | 'filled'; // Phase 2, Item 6
 }
 
-export interface MappingEntry {
+export interface LegacyMappingEntry {
   target: string;
   transform: string[];
 }
+
+export type MappingLifecycleStatus =
+  | 'discovered'
+  | 'suggested'
+  | 'reviewed'
+  | 'validated'
+  | 'active';
+
+export interface MappingResolutionSource {
+  type: 'crm' | 'organization.directory' | 'user.input';
+  path?: string;
+}
+
+export interface MappingTransform {
+  type: string;
+  format?: string;
+}
+
+export interface MappingDefinition {
+  id: string;
+  semantic: {
+    key: string;
+    label: string;
+    type: string;
+  };
+  target: {
+    field: string;
+    layoutReference: string;
+  };
+  resolution: {
+    sources: MappingResolutionSource[];
+    priority: Array<'crm' | 'organization.directory' | 'user.input'>;
+  };
+  transform: MappingTransform[];
+  confidence: {
+    score: number;
+    status: 'unverified' | 'low' | 'medium' | 'high';
+  };
+  status: MappingLifecycleStatus;
+  lifecycle?: {
+    states: MappingLifecycleStatus[];
+    current: MappingLifecycleStatus;
+  };
+  suggestion?: {
+    source: string;
+    confidence: number;
+  };
+}
+
+export interface MappingArtifact {
+  schemaVersion: '1.0';
+  artifactType: 'field-mapping';
+  capability: string;
+  mappings: MappingDefinition[];
+}
+
+export type MappingSchema = MappingArtifact | Record<string, LegacyMappingEntry>;
 
 export interface TransformEntry {
   type: string;

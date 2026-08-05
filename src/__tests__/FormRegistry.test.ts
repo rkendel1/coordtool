@@ -1,5 +1,5 @@
 import { FormRegistry } from '../registry/FormRegistry';
-import { LayoutEntry, MappingEntry, TransformEntry } from '../types/Field';
+import { LayoutEntry, MappingSchema, TransformEntry } from '../types/Field';
 
 describe('FormRegistry', () => {
   let registry: FormRegistry;
@@ -29,7 +29,7 @@ describe('FormRegistry', () => {
   it('retrieves form schema by id', () => {
     const schema = {
       layout: { field1: {} as LayoutEntry },
-      mapping: { field1: {} as MappingEntry },
+      mapping: { field1: { target: 'field1', transform: [] } } as MappingSchema,
       transforms: { field1: {} as TransformEntry },
     };
 
