@@ -11,6 +11,8 @@ import { isOverflowRisk } from '../utils/validation';
 import { OCRWord, extractTextWithOCR, findNearbyLabel, labelToFieldName } from '../utils/ocr';
 import { detectFieldRegions } from '../utils/fieldDetection';
 import { displayLabelFromPdfFieldId, semanticKeyFromPdfFieldId } from '../utils/fieldNames';
+import { DocumentProfile } from '../utils/documentProfile';
+import { acordLayoutStatus } from '../acord/workflow';
 import './PDFViewer.css';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `${process.env.PUBLIC_URL}/pdf.worker.min.mjs`;
@@ -155,6 +157,7 @@ interface Props {
   gridSize: number;
   enableOCR: boolean;
   enableAutoDetect: boolean;
+  documentProfile: DocumentProfile;
   onPageChange: (page: number) => void;
   onFieldAdded: (field: Field) => void;
   onFieldSelected: (id: string) => void;
@@ -173,6 +176,7 @@ export const PDFViewer: React.FC<Props> = ({
   gridSize,
   enableOCR,
   enableAutoDetect,
+  documentProfile,
   onPageChange,
   onFieldAdded,
   onFieldSelected,
@@ -183,6 +187,8 @@ export const PDFViewer: React.FC<Props> = ({
   const pdfRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null);
   const viewportRef = useRef<pdfjsLib.PageViewport | null>(null);
   const pageRef = useRef<pdfjsLib.PDFPageProxy | null>(null);
+  const renderTaskRef = useRef<any>(null);
+  const renderRequestRef = useRef(0);
   const [drawing, setDrawing] = useState<DrawRect | null>(null);
   const [ocrWords, setOcrWords] = useState<OCRWord[]>([]);
   const [ocrStatus, setOcrStatus] = useState('');
@@ -210,31 +216,53 @@ export const PDFViewer: React.FC<Props> = ({
   // Load PDF
   useEffect(() => {
     let cancelled = false;
+    const requestCounter = renderRequestRef;
+    const activeRenderTask = renderTaskRef;
     file.arrayBuffer().then((buf) => {
       if (cancelled) return;
       pdfjsLib.getDocument({ data: buf }).promise.then((pdf) => {
         if (cancelled) return;
         pdfRef.current = pdf;
-        renderPage(pdf, currentPage);
+        void renderPage(pdf, currentPage).catch(reportRenderError);
       });
     });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      requestCounter.current++;
+      activeRenderTask.current?.cancel();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [file]);
 
   // Re-render page when page number changes or auto-detect toggles
   useEffect(() => {
     if (pdfRef.current) {
-      renderPage(pdfRef.current, currentPage);
+      void renderPage(pdfRef.current, currentPage).catch(reportRenderError);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage, enableAutoDetect, enableOCR]);
+  }, [currentPage, enableAutoDetect, enableOCR, documentProfile]);
 
   const renderPage = async (
     pdf: pdfjsLib.PDFDocumentProxy,
     pageNum: number
   ) => {
+    const requestId = ++renderRequestRef.current;
     const page = await pdf.getPage(pageNum);
+    if (requestId !== renderRequestRef.current) return;
+
+    // PDF.js forbids concurrent render tasks targeting one canvas. Cancel and
+    // settle the previous task before the canvas is resized or reused.
+    const previousTask = renderTaskRef.current;
+    if (previousTask) {
+      previousTask.cancel();
+      try {
+        await previousTask.promise;
+      } catch (error: any) {
+        if (error?.name !== 'RenderingCancelledException') throw error;
+      }
+    }
+    if (requestId !== renderRequestRef.current) return;
+
     pageRef.current = page;
     const viewport = page.getViewport({ scale: SCALE });
     viewportRef.current = viewport;
@@ -248,7 +276,26 @@ export const PDFViewer: React.FC<Props> = ({
     overlay.height = viewport.height;
 
     const ctx = canvas.getContext('2d')!;
-    await page.render({ canvas, canvasContext: ctx, viewport }).promise;
+    const renderTask = page.render({ canvas, canvasContext: ctx, viewport });
+    renderTaskRef.current = renderTask;
+    try {
+      await renderTask.promise;
+    } catch (error: any) {
+      if (error?.name === 'RenderingCancelledException') return;
+      throw error;
+    } finally {
+      if (renderTaskRef.current === renderTask) renderTaskRef.current = null;
+    }
+    if (requestId !== renderRequestRef.current) return;
+
+    // Hard workflow boundary: ACORD is schema/layout driven. Do not run native
+    // widget inference, embedded-text geometry, or OCR field inference here.
+    if (documentProfile.kind === 'acord') {
+      setOcrWords([]);
+      setOcrStatus(acordLayoutStatus(documentProfile));
+      drawOverlay();
+      return;
+    }
     
     // Auto-detect native widgets first, then printed/flattened form cells.
     const embeddedWords = (enableAutoDetect || enableOCR)
@@ -294,6 +341,12 @@ export const PDFViewer: React.FC<Props> = ({
     
     drawOverlay();
   };
+
+  function reportRenderError(error: any) {
+    if (error?.name === 'RenderingCancelledException') return;
+    console.error('PDF render failed:', error);
+    setOcrStatus('PDF render failed — check the browser console for details');
+  }
 
   const autoDetectFlatFields = (
     canvas: HTMLCanvasElement,

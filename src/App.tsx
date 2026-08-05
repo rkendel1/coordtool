@@ -6,6 +6,7 @@ import { FieldEditor } from './components/FieldEditor';
 import { FieldList } from './components/FieldList';
 import { ExportPanel } from './components/ExportPanel';
 import { PreviewPanel } from './components/PreviewPanel';
+import { ImportPanel } from './components/ImportPanel';
 import { Field, FieldType } from './types/Field';
 import { inferCapabilityId } from './utils/capability';
 import {
@@ -15,6 +16,12 @@ import {
   suggestSemanticKey,
 } from './utils/fieldNames';
 import { inferFieldMetadata } from './utils/fieldInference';
+import {
+  capabilityForAcord,
+  detectDocumentProfile,
+  DocumentProfile,
+} from './utils/documentProfile';
+import { getAcordStarterFields } from './acord/layouts';
 import './App.css';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `${process.env.PUBLIC_URL}/pdf.worker.min.mjs`;
@@ -49,6 +56,7 @@ function App() {
   const [showFieldOverlays, setShowFieldOverlays] = useState(true);
   const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
   const [capabilityId, setCapabilityId] = useState('');
+  const [documentProfile, setDocumentProfile] = useState<DocumentProfile>({ kind: 'generic' });
 
   // Load total pages when file changes
   useEffect(() => {
@@ -65,9 +73,25 @@ function App() {
           const text = content.items
             .map((item: any) => typeof item.str === 'string' ? item.str : '')
             .join(' ');
-          setCapabilityId(inferCapabilityId(pdfFile.name, text));
+          const profile = detectDocumentProfile(pdfFile.name, text);
+          setDocumentProfile(profile);
+          if (profile.kind === 'acord') {
+            setEnableOCR(false);
+            setCapabilityId(capabilityForAcord(profile));
+            setFields((previous) => previous.length > 0
+              ? previous
+              : getAcordStarterFields(profile));
+          } else {
+            setCapabilityId(inferCapabilityId(pdfFile.name, text));
+          }
         }).catch(() => {
-          if (!cancelled) setCapabilityId(inferCapabilityId(pdfFile.name));
+          if (!cancelled) {
+            const profile = detectDocumentProfile(pdfFile.name);
+            setDocumentProfile(profile);
+            setCapabilityId(profile.kind === 'acord'
+              ? capabilityForAcord(profile)
+              : inferCapabilityId(pdfFile.name));
+          }
         });
       });
     });
@@ -82,6 +106,12 @@ function App() {
     setEnableAutoDetect(true);
     setShowFieldOverlays(true);
     setCapabilityId(inferCapabilityId(file.name));
+    const profile = detectDocumentProfile(file.name);
+    setDocumentProfile(profile);
+    if (profile.kind === 'acord') {
+      setFields(getAcordStarterFields(profile));
+      setCapabilityId(capabilityForAcord(profile));
+    }
   }, []);
 
   const handleFieldAdded = useCallback((field: Field) => {
@@ -128,6 +158,16 @@ function App() {
     setFields((prev) => prev.filter((field) => !field.id.startsWith('flat-')));
     setSelectedId((prev) => prev?.startsWith('flat-') ? null : prev);
   }, [enableOCR]);
+
+  // Activating ACORD mode must hydrate the current document too. Keeping this
+  // separate from file loading makes it work after profile detection, Fast
+  // Refresh, and future programmatic profile changes.
+  useEffect(() => {
+    if (documentProfile.kind !== 'acord') return;
+    const starterFields = getAcordStarterFields(documentProfile);
+    if (starterFields.length === 0) return;
+    setFields((previous) => previous.length > 0 ? previous : starterFields);
+  }, [documentProfile]);
 
   useEffect(() => {
     const handleDeleteKey = (event: KeyboardEvent) => {
@@ -204,14 +244,20 @@ function App() {
                 <option value={16}>16px</option>
               </select>
               
-              <label className="ctrl-check">
-                <input
-                  type="checkbox"
-                  checked={enableOCR}
-                  onChange={(e) => setEnableOCR(e.target.checked)}
-                />
-                OCR fallback
-              </label>
+              {documentProfile.kind === 'acord' ? (
+                <span className="ctrl-mode-badge" title="ACORD forms use curated layouts instead of generic OCR detection">
+                  ACORD {documentProfile.formNumber || ''} layout mode
+                </span>
+              ) : (
+                <label className="ctrl-check">
+                  <input
+                    type="checkbox"
+                    checked={enableOCR}
+                    onChange={(e) => setEnableOCR(e.target.checked)}
+                  />
+                  OCR fallback
+                </label>
+              )}
               
               <label className="ctrl-check">
                 <input
@@ -308,6 +354,14 @@ function App() {
                       onSelect={setSelectedId}
                       onDelete={handleFieldDeleted}
                     />
+                    {documentProfile.kind === 'acord' && (
+                      <ImportPanel
+                        onImport={(importedFields) => {
+                          setFields(importedFields);
+                          setSelectedId(importedFields[0]?.id ?? null);
+                        }}
+                      />
+                    )}
                   </section>
 
                 </aside>
@@ -324,6 +378,7 @@ function App() {
                     gridSize={gridSize}
                     enableOCR={enableOCR}
                     enableAutoDetect={enableAutoDetect}
+                    documentProfile={documentProfile}
                     currentPage={currentPage}
                     totalPages={totalPages}
                     onPageChange={setCurrentPage}

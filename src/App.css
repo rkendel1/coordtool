@@ -75,6 +75,16 @@
   user-select: none;
 }
 
+.ctrl-mode-badge {
+  padding: 5px 9px;
+  border: 1px solid #b88322;
+  border-radius: 5px;
+  background: #3b321f;
+  color: #ffd47d;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
 .ctrl-reset {
   padding: 6px 14px;
   border: 1px solid #4a6080;
