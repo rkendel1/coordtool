@@ -184,6 +184,7 @@ interface Props {
   documentProfile: DocumentProfile;
   onPageChange: (page: number) => void;
   onFieldAdded: (field: Field) => void;
+  onGeneratedFieldsReset: () => void;
   onFieldSelected: (id: string) => void;
   onOCRProgress?: (progress: number) => void;
 }
@@ -203,6 +204,7 @@ export const PDFViewer: React.FC<Props> = ({
   documentProfile,
   onPageChange,
   onFieldAdded,
+  onGeneratedFieldsReset,
   onFieldSelected,
   onOCRProgress,
 }) => {
@@ -213,6 +215,7 @@ export const PDFViewer: React.FC<Props> = ({
   const pageRef = useRef<pdfjsLib.PDFPageProxy | null>(null);
   const renderTaskRef = useRef<any>(null);
   const renderRequestRef = useRef(0);
+  const acordScanRef = useRef<{ fileKey: string; count: number } | null>(null);
   const [drawing, setDrawing] = useState<DrawRect | null>(null);
   const [ocrWords, setOcrWords] = useState<OCRWord[]>([]);
   const [ocrStatus, setOcrStatus] = useState('');
@@ -242,6 +245,7 @@ export const PDFViewer: React.FC<Props> = ({
     let cancelled = false;
     const requestCounter = renderRequestRef;
     const activeRenderTask = renderTaskRef;
+    acordScanRef.current = null;
     file.arrayBuffer().then((buf) => {
       if (cancelled) return;
       pdfjsLib.getDocument({ data: buf }).promise.then((pdf) => {
@@ -317,18 +321,23 @@ export const PDFViewer: React.FC<Props> = ({
     // or OCR-generated rectangles.
     if (documentProfile.kind === 'acord') {
       setOcrWords([]);
-      setOcrStatus(acordLayoutStatus(documentProfile));
-      let detectedCount = 0;
-      for (let index = 0; index < pdf.numPages; index++) {
+      const fileKey = `native-v2:${file.name}:${file.size}:${file.lastModified}`;
+      if (acordScanRef.current?.fileKey !== fileKey) {
+        setOcrStatus(acordLayoutStatus(documentProfile));
+        onGeneratedFieldsReset();
+        let detectedCount = 0;
+        for (let index = 0; index < pdf.numPages; index++) {
+          if (requestId !== renderRequestRef.current) return;
+          const acordPage = index === pageNum - 1 ? page : await pdf.getPage(index + 1);
+          const acordViewport = acordPage.getViewport({ scale: SCALE });
+          const words = await extractEmbeddedPdfWords(acordPage, acordViewport);
+          const result = await autoDetectFormFields(acordPage, acordViewport, index, words, true);
+          detectedCount += result.count;
+        }
         if (requestId !== renderRequestRef.current) return;
-        const acordPage = index === pageNum - 1 ? page : await pdf.getPage(index + 1);
-        const acordViewport = acordPage.getViewport({ scale: SCALE });
-        const words = await extractEmbeddedPdfWords(acordPage, acordViewport);
-        const result = await autoDetectFormFields(acordPage, acordViewport, index, words, true);
-        detectedCount += result.count;
+        acordScanRef.current = { fileKey, count: detectedCount };
       }
-      if (requestId !== renderRequestRef.current) return;
-      setOcrStatus(`Loaded ${detectedCount} authoritative ACORD PDF fields`);
+      setOcrStatus(`Loaded ${acordScanRef.current?.count || 0} authoritative ACORD PDF fields`);
       drawOverlay();
       return;
     }

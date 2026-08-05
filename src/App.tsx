@@ -142,6 +142,12 @@ function App() {
     setSelectedId((prev) => (prev === id ? null : prev));
   }, []);
 
+  const handleGeneratedFieldsReset = useCallback(() => {
+    setFields((previous) => previous.filter((field) =>
+      !field.id.startsWith('auto-') && !/^acord-125-v\d+-/.test(field.id)));
+    setSelectedId((previous) => previous?.startsWith('auto-') ? null : previous);
+  }, []);
+
   // Flattened-page detections are provisional output from the opt-in OCR
   // fallback. Remove them when that fallback is disabled; native and manually
   // drawn fields use different id prefixes and remain untouched.
@@ -150,20 +156,6 @@ function App() {
     setFields((prev) => prev.filter((field) => !field.id.startsWith('flat-')));
     setSelectedId((prev) => prev?.startsWith('flat-') ? null : prev);
   }, [enableOCR]);
-
-  // Clear prior ACORD imports when the detected ACORD profile changes. The
-  // dedicated scan immediately recreates them with current labels/semantics.
-  useEffect(() => {
-    if (documentProfile.kind !== 'acord') return;
-    setFields((previous) => {
-      const hasGeneratedAcordFields = previous.some((field) =>
-        /^acord-125-v\d+-/.test(field.id) || field.id.startsWith('auto-'));
-      return hasGeneratedAcordFields
-        ? previous.filter((field) =>
-            !/^acord-125-v\d+-/.test(field.id) && !field.id.startsWith('auto-'))
-        : previous;
-    });
-  }, [documentProfile]);
 
   useEffect(() => {
     const handleDeleteKey = (event: KeyboardEvent) => {
@@ -371,6 +363,7 @@ function App() {
                     totalPages={totalPages}
                     onPageChange={setCurrentPage}
                     onFieldAdded={handleFieldAdded}
+                    onGeneratedFieldsReset={handleGeneratedFieldsReset}
                     onFieldSelected={setSelectedId}
                   />
                 </div>
