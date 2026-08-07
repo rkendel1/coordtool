@@ -91,6 +91,24 @@ function insetOverlayRect(rect: CanvasRect, requestedInset = 2): CanvasRect {
   };
 }
 
+function fieldToCanvasRect(field: Pick<Field, 'x' | 'y' | 'width' | 'height'>,
+                           viewport: pdfjsLib.PageViewport): CanvasRect {
+  const converted = viewport.convertToViewportRectangle([
+    field.x,
+    field.y,
+    field.x + field.width,
+    field.y + field.height,
+  ]);
+  const left = Math.min(converted[0], converted[2]);
+  const top = Math.min(converted[1], converted[3]);
+  return {
+    x: left,
+    y: top,
+    width: Math.abs(converted[2] - converted[0]),
+    height: Math.abs(converted[3] - converted[1]),
+  };
+}
+
 interface NativeDetectionResult {
   count: number;
   regions: Array<{ x: number; y: number; width: number; height: number }>;
@@ -345,11 +363,17 @@ export const PDFViewer: React.FC<Props> = ({
     // or OCR-generated rectangles.
     if (documentProfile.kind === 'acord') {
       setOcrWords([]);
-      const fileKey = `native-v3:${file.name}:${file.size}:${file.lastModified}`;
+      const fileKey = `native-v4:${file.name}:${file.size}:${file.lastModified}`;
       if (acordScanRef.current?.fileKey !== fileKey) {
         setOcrStatus(acordLayoutStatus(documentProfile));
         onGeneratedFieldsReset();
         let detectedCount = 0;
+        const flattenedPages: Array<{
+          index: number;
+          page: pdfjsLib.PDFPageProxy;
+          viewport: pdfjsLib.PageViewport;
+          words: OCRWord[];
+        }> = [];
         for (let index = 0; index < pdf.numPages; index++) {
           if (requestId !== renderRequestRef.current) return;
           setOcrStatus(`ACORD native fields: scanning page ${index + 1} of ${pdf.numPages}…`);
@@ -358,10 +382,41 @@ export const PDFViewer: React.FC<Props> = ({
           const words = await extractEmbeddedPdfWords(acordPage, acordViewport);
           const result = await autoDetectFormFields(acordPage, acordViewport, index, words, true);
           detectedCount += result.count;
+          if (result.count === 0) {
+            flattenedPages.push({ index, page: acordPage, viewport: acordViewport, words });
+          }
+        }
+
+        // Some ACORD files mix flattened pages with true AcroForm pages. Only
+        // infer regions on pages that contain no native widgets; augmenting a
+        // populated page produces many false-positive table/decorative cells.
+        let flattenedCount = 0;
+        for (const flattened of flattenedPages) {
+          if (requestId !== renderRequestRef.current) return;
+          setOcrStatus(`ACORD flattened page ${flattened.index + 1}: detecting fields…`);
+          const analysisCanvas = document.createElement('canvas');
+          analysisCanvas.width = flattened.viewport.width;
+          analysisCanvas.height = flattened.viewport.height;
+          const analysisContext = analysisCanvas.getContext('2d');
+          if (!analysisContext) continue;
+          await flattened.page.render({
+            canvas: analysisCanvas,
+            canvasContext: analysisContext,
+            viewport: flattened.viewport,
+          }).promise;
+          flattenedCount += autoDetectFlatFields(
+            analysisCanvas,
+            flattened.viewport,
+            flattened.index,
+            flattened.words,
+            [],
+            'acord-gap'
+          );
         }
         if (requestId !== renderRequestRef.current) return;
-        acordScanRef.current = { fileKey, count: detectedCount };
-        setOcrStatus(`Loaded ${detectedCount} native ACORD fields`);
+        const totalCount = detectedCount + flattenedCount;
+        acordScanRef.current = { fileKey, count: totalCount };
+        setOcrStatus(`Loaded ${detectedCount} native + ${flattenedCount} flattened ACORD fields`);
       } else {
         setOcrStatus(`Loaded ${acordScanRef.current.count} ACORD field regions`);
       }
@@ -433,10 +488,16 @@ export const PDFViewer: React.FC<Props> = ({
     const regions = detectFieldRegions(ctx.getImageData(0, 0, canvas.width, canvas.height), words);
     let added = 0;
     regions.forEach((region, index) => {
-      const pdfX = region.x / SCALE;
-      const pdfY = (viewport.height - region.y - region.height) / SCALE;
-      const width = region.width / SCALE;
-      const height = region.height / SCALE;
+      const [pdfLeft, pdfBottom] = viewport.convertToPdfPoint(
+        region.x, region.y + region.height
+      );
+      const [pdfRight, pdfTop] = viewport.convertToPdfPoint(
+        region.x + region.width, region.y
+      );
+      const pdfX = Math.min(pdfLeft, pdfRight);
+      const pdfY = Math.min(pdfBottom, pdfTop);
+      const width = Math.abs(pdfRight - pdfLeft);
+      const height = Math.abs(pdfTop - pdfBottom);
       if (overlapsExistingRegion({ x: pdfX, y: pdfY, width, height }, nativeRegions)) return;
       if (fields.some(f => f.page === pageIndex && Math.abs(f.x - pdfX) < 4 && Math.abs(f.y - pdfY) < 4)) return;
       const name = region.label || `detected_page${pageIndex + 1}_${index + 1}`;
@@ -555,12 +616,7 @@ export const PDFViewer: React.FC<Props> = ({
     // Draw saved fields
     for (const f of showFieldOverlays ? fields : []) {
       if (f.page !== currentPage - 1) continue;
-      const overlayRect = insetOverlayRect({
-        x: f.x * SCALE,
-        y: viewport.height - (f.y + f.height) * SCALE,
-        width: f.width * SCALE,
-        height: f.height * SCALE,
-      });
+      const overlayRect = insetOverlayRect(fieldToCanvasRect(f, viewport));
       const { x: canvasX, y: canvasY, width: canvasW, height: canvasH } = overlayRect;
 
       // Check for overflow risk
@@ -640,10 +696,12 @@ export const PDFViewer: React.FC<Props> = ({
 
     for (const f of showFieldOverlays ? fields : []) {
       if (f.page !== currentPage - 1) continue;
-      const canvasX = f.x * SCALE;
-      const canvasY = viewport.height - (f.y + f.height) * SCALE;
-      const canvasW = f.width * SCALE;
-      const canvasH = f.height * SCALE;
+      const {
+        x: canvasX,
+        y: canvasY,
+        width: canvasW,
+        height: canvasH,
+      } = fieldToCanvasRect(f, viewport);
       if (
         pos.x >= canvasX &&
         pos.x <= canvasX + canvasW &&
@@ -679,17 +737,14 @@ export const PDFViewer: React.FC<Props> = ({
 
     if (w < 5 || h < 5) { setDrawing(null); return; }
 
-    // Convert top-left of rectangle to PDF coords (computed manually below)
-    // Width/height just scale by SCALE factor
-    let pdfWidth = w / SCALE;
-    let pdfHeight = h / SCALE;
-
-    // PDF y is bottom-left origin, so we need to adjust:
-    // canvasY is from top, PDF y is from bottom
-    // The bottom of the rectangle in canvas coords = y + h
-    // PDF y of bottom = (viewport.height - (y + h)) / SCALE
-    let pdfY = (viewport.height - (y + h)) / SCALE;
-    let pdfX = x / SCALE;
+    // Use the viewport transform rather than assuming an unshifted MediaBox;
+    // PDFs with CropBox offsets otherwise store visibly displaced fields.
+    const [pdfLeft, pdfBottom] = viewport.convertToPdfPoint(x, y + h);
+    const [pdfRight, pdfTop] = viewport.convertToPdfPoint(x + w, y);
+    let pdfX = Math.min(pdfLeft, pdfRight);
+    let pdfY = Math.min(pdfBottom, pdfTop);
+    let pdfWidth = Math.abs(pdfRight - pdfLeft);
+    let pdfHeight = Math.abs(pdfTop - pdfBottom);
     
     // Apply snap-to-grid if Shift is pressed
     if (shiftPressed && gridSize > 0) {
