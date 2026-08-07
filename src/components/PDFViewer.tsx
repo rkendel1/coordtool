@@ -67,6 +67,30 @@ interface DrawRect {
   endY: number;
 }
 
+interface CanvasRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** Keep the mapper overlay visibly inside the PDF's printed/widget border.
+ * Canvas strokes are centered on their path, so drawing the raw PDF rectangle
+ * otherwise puts half of every outline outside its field. */
+function insetOverlayRect(rect: CanvasRect, requestedInset = 2): CanvasRect {
+  const inset = Math.max(0, Math.min(
+    requestedInset,
+    rect.width / 4,
+    rect.height / 4
+  ));
+  return {
+    x: rect.x + inset,
+    y: rect.y + inset,
+    width: Math.max(0, rect.width - inset * 2),
+    height: Math.max(0, rect.height - inset * 2),
+  };
+}
+
 interface NativeDetectionResult {
   count: number;
   regions: Array<{ x: number; y: number; width: number; height: number }>;
@@ -575,18 +599,25 @@ export const PDFViewer: React.FC<Props> = ({
     // Draw saved fields
     for (const f of showFieldOverlays ? fields : []) {
       if (f.page !== currentPage - 1) continue;
-      const canvasX = f.x * SCALE;
-      const canvasY = viewport.height - (f.y + f.height) * SCALE;
-      const canvasW = f.width * SCALE;
-      const canvasH = f.height * SCALE;
+      const overlayRect = insetOverlayRect({
+        x: f.x * SCALE,
+        y: viewport.height - (f.y + f.height) * SCALE,
+        width: f.width * SCALE,
+        height: f.height * SCALE,
+      });
+      const { x: canvasX, y: canvasY, width: canvasW, height: canvasH } = overlayRect;
 
       // Check for overflow risk
       const hasOverflow = debugMode && isOverflowRisk(f.type, f.maxWidth ?? f.width);
       
       ctx.fillStyle = hasOverflow ? 'rgba(255, 0, 0, 0.25)' : TYPE_COLORS[f.type];
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(canvasX, canvasY, canvasW, canvasH);
+      ctx.clip();
       ctx.fillRect(canvasX, canvasY, canvasW, canvasH);
 
-      ctx.strokeStyle = hasOverflow 
+      ctx.strokeStyle = hasOverflow
         ? '#ff0000' 
         : (f.id === selectedId ? '#ff4400' : TYPE_STROKE[f.type]);
       ctx.lineWidth = hasOverflow ? 2.5 : (f.id === selectedId ? 2.5 : 1.5);
@@ -595,10 +626,6 @@ export const PDFViewer: React.FC<Props> = ({
       // Field names overwhelm dense forms such as ACORD when painted into
       // every short row. Keep the normal overlay structural; the sidebar and
       // editor carry labels, while debug mode can opt into canvas details.
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(canvasX, canvasY, canvasW, canvasH);
-      ctx.clip();
       if (debugMode) {
         ctx.fillStyle = hasOverflow ? '#ff0000' : '#1a1a2e';
         ctx.font = hasOverflow ? 'bold 10px monospace' : '10px monospace';
