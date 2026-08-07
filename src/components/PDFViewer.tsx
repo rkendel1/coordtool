@@ -345,17 +345,11 @@ export const PDFViewer: React.FC<Props> = ({
     // or OCR-generated rectangles.
     if (documentProfile.kind === 'acord') {
       setOcrWords([]);
-      const fileKey = `native-v2:${file.name}:${file.size}:${file.lastModified}`;
+      const fileKey = `native-v3:${file.name}:${file.size}:${file.lastModified}`;
       if (acordScanRef.current?.fileKey !== fileKey) {
         setOcrStatus(acordLayoutStatus(documentProfile));
         onGeneratedFieldsReset();
         let detectedCount = 0;
-        const scannedPages: Array<{
-          page: pdfjsLib.PDFPageProxy;
-          viewport: pdfjsLib.PageViewport;
-          words: OCRWord[];
-          nativeRegions: NativeDetectionResult['regions'];
-        }> = [];
         for (let index = 0; index < pdf.numPages; index++) {
           if (requestId !== renderRequestRef.current) return;
           setOcrStatus(`ACORD native fields: scanning page ${index + 1} of ${pdf.numPages}…`);
@@ -364,48 +358,10 @@ export const PDFViewer: React.FC<Props> = ({
           const words = await extractEmbeddedPdfWords(acordPage, acordViewport);
           const result = await autoDetectFormFields(acordPage, acordViewport, index, words, true);
           detectedCount += result.count;
-          scannedPages.push({
-            page: acordPage,
-            viewport: acordViewport,
-            words,
-            nativeRegions: result.regions,
-          });
-        }
-
-        // Older ACORD PDFs have incomplete AcroForms. A second pass examines
-        // ruled regions only after excluding every native widget rectangle.
-        let supplementalCount = 0;
-        for (let index = 0; index < scannedPages.length; index++) {
-          if (requestId !== renderRequestRef.current) return;
-          setOcrStatus(
-            `ACORD gap coverage: scanning page ${index + 1} of ${scannedPages.length} ` +
-            `(${detectedCount} native, ${supplementalCount} supplemental)…`
-          );
-          const scanned = scannedPages[index];
-          const analysisCanvas = document.createElement('canvas');
-          analysisCanvas.width = scanned.viewport.width;
-          analysisCanvas.height = scanned.viewport.height;
-          const analysisContext = analysisCanvas.getContext('2d');
-          if (!analysisContext) continue;
-          await scanned.page.render({
-            canvas: analysisCanvas,
-            canvasContext: analysisContext,
-            viewport: scanned.viewport,
-          }).promise;
-          supplementalCount += autoDetectFlatFields(
-            analysisCanvas,
-            scanned.viewport,
-            index,
-            scanned.words,
-            scanned.nativeRegions,
-            'acord-gap'
-          );
         }
         if (requestId !== renderRequestRef.current) return;
-        acordScanRef.current = { fileKey, count: detectedCount + supplementalCount };
-        setOcrStatus(
-          `Loaded ${detectedCount} native + ${supplementalCount} supplemental ACORD fields`
-        );
+        acordScanRef.current = { fileKey, count: detectedCount };
+        setOcrStatus(`Loaded ${detectedCount} native ACORD fields`);
       } else {
         setOcrStatus(`Loaded ${acordScanRef.current.count} ACORD field regions`);
       }
